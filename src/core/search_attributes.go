@@ -17,11 +17,21 @@ import (
 
 // Search attribute keys for client-answered tracking
 var (
-	// ClientAnsweredField is a boolean search attribute indicating if client has answered
-	ClientAnsweredField = temporal.NewSearchAttributeKeyBool("ClientAnswered")
-	// ClientAnsweredAtField is a datetime search attribute for when client answered
+	ClientAnsweredField   = temporal.NewSearchAttributeKeyBool("ClientAnswered")
 	ClientAnsweredAtField = temporal.NewSearchAttributeKeyTime("ClientAnsweredAt")
 )
+
+// SearchAttributeKey is an interface for search attribute keys
+type SearchAttributeKey interface {
+	GetName() string
+	GetValueType() enums.IndexedValueType
+}
+
+// SearchAttributeKeys is an enum-like slice of all search attribute keys
+var SearchAttributeKeys = []SearchAttributeKey{
+	ClientAnsweredField,
+	ClientAnsweredAtField,
+}
 
 // RegisterSearchAttributesIfNeeded registers the required search attributes with the Temporal server
 // if they don't already exist. This should be called during worker initialization.
@@ -48,12 +58,6 @@ func RegisterSearchAttributesIfNeeded(c client.Client) error {
 
 	operatorClient := operatorservice.NewOperatorServiceClient(conn)
 
-	// Define the search attributes we need
-	searchAttributes := map[string]enums.IndexedValueType{
-		"ClientAnswered":   enums.INDEXED_VALUE_TYPE_BOOL,
-		"ClientAnsweredAt": enums.INDEXED_VALUE_TYPE_DATETIME,
-	}
-
 	// First, list existing search attributes to check what's already registered
 	log.Println("Listing existing search attributes...")
 	listReq := &operatorservice.ListSearchAttributesRequest{}
@@ -64,9 +68,11 @@ func RegisterSearchAttributesIfNeeded(c client.Client) error {
 
 	log.Printf("Found %d custom search attributes already registered", len(listResp.CustomAttributes))
 
-	// Check which attributes need to be added
+	// Check which attributes need to be added - iterate over the enum directly
 	attributesToAdd := make(map[string]enums.IndexedValueType)
-	for name, valueType := range searchAttributes {
+	for _, key := range SearchAttributeKeys {
+		name := key.GetName()
+		valueType := key.GetValueType()
 		if _, exists := listResp.CustomAttributes[name]; !exists {
 			attributesToAdd[name] = valueType
 		} else {
