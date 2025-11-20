@@ -79,14 +79,15 @@ func (h *BaseHandler) SetNext(handler SignalHandler) {
 	h.next = handler
 }
 
+func (h *BaseHandler) GetNext() SignalHandler {
+	return h.next
+}
+
 func getNextHandler(handler SignalHandler) SignalHandler {
-	// Try to get next from handlers that embed BaseHandler
-	switch h := handler.(type) {
-	case *ClientAnsweredHandler:
-		return h.next
-	case *TimeoutHandler:
-		return h.next
-	default:
-		return nil
+	// Access next handler through BaseHandler
+	// All handlers embed BaseHandler, so we can access it via GetNext method
+	if baseHandler, ok := handler.(interface{ GetNext() SignalHandler }); ok {
+		return baseHandler.GetNext()
 	}
+	return nil
 }

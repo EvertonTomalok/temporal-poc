@@ -28,12 +28,20 @@ func SignalCollectorWorkflow(ctx workflow.Context) error {
 	// Build the chain of responsibility
 	chain := nodes.NewHandlerChain()
 
-	// Handlers that can optionally wait for signals
+	// Handler that waits for client-answered signal and handles timeout
 	chain.AddHandler(nodes.NewClientAnsweredHandler(clientAnsweredChannel))
-	chain.AddHandler(nodes.NewTimeoutHandler())
 
 	// Listen for signals until timeout or client-answered is received
 	for {
+		// Check if client already answered (before processing handlers)
+		if handlerCtx.ClientAnswered {
+			if handlerCtx.CancelTimer != nil {
+				handlerCtx.CancelTimer()
+			}
+			logger.Info("Workflow completing due to client-answered signal")
+			break
+		}
+
 		// Calculate remaining time
 		elapsed := workflow.Now(ctx).Sub(handlerCtx.StartTime)
 		remaining := handlerCtx.TimeoutDuration - elapsed
@@ -44,15 +52,26 @@ func SignalCollectorWorkflow(ctx workflow.Context) error {
 		}
 
 		// Use selector to wait for signal or timeout
+		// Create a new selector each iteration (like the await-signals example)
 		selector := workflow.NewSelector(ctx)
 
 		// Process through the chain - nodes will add their handlers to the selector
-		chain.Process(ctx, handlerCtx, selector)
+		result := chain.Process(ctx, handlerCtx, selector)
+
+		// If handler returned Stop, break immediately
+		if result == nodes.Stop {
+			if handlerCtx.CancelTimer != nil {
+				handlerCtx.CancelTimer()
+			}
+			break
+		}
 
 		// Wait for either signal or timeout
+		// This blocks until one of the registered callbacks is triggered
 		selector.Select(ctx)
 
-		// Check if workflow should stop
+		// After Select() returns, check if we should stop
+		// The callbacks have already executed, so check the state
 		if handlerCtx.ClientAnswered {
 			if handlerCtx.CancelTimer != nil {
 				handlerCtx.CancelTimer()
@@ -68,11 +87,6 @@ func SignalCollectorWorkflow(ctx workflow.Context) error {
 			}
 			logger.Info("1 minute timeout reached")
 			break
-		}
-
-		// If signal was received, cancel the timer to avoid resource leak
-		if handlerCtx.CancelTimer != nil {
-			handlerCtx.CancelTimer()
 		}
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"temporal-poc/src/core"
 	workflows "temporal-poc/src/workflows"
 	"time"
 
@@ -23,7 +24,7 @@ func main() {
 	// Start workflow
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        "signal-collector-" + uuid.New().String(),
-		TaskQueue: "signal-collector-task-queue",
+		TaskQueue: core.PrimaryWorkflowTaskQueue,
 	}
 
 	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, workflows.SignalCollectorWorkflow)
@@ -34,6 +35,7 @@ func main() {
 	workflowID := we.GetID()
 	log.Printf("Workflow ID: %s\n", workflowID)
 	log.Printf("Started workflow with ID: %s and RunID: %s\n", workflowID, we.GetRunID())
+	log.Printf("go run ./cmd/signal-sender -workflow-id %s to send 'client-answered' signal\n", workflowID)
 
 	// Wait for client-answered signal with 1 minute timeout
 	log.Println("Waiting for 'client-answered' signal (max 1 minute)...")

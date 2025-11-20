@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"temporal-poc/src/core"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
@@ -22,7 +23,7 @@ func main() {
 	defer c.Close()
 
 	// Create worker
-	w := worker.New(c, "primary-workflow-task-queue", worker.Options{})
+	w := worker.New(c, core.PrimaryWorkflowTaskQueue, worker.Options{})
 
 	// Register workflow
 	w.RegisterWorkflow(workflows.SignalCollectorWorkflow)

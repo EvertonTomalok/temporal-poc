@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
+	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 )
 
@@ -23,6 +25,7 @@ func main() {
 	// Create Temporal client
 	c, err := client.Dial(client.Options{
 		HostPort: client.DefaultHostPort,
+		Identity: fmt.Sprintf("signal-sender-%s", uuid.New().String()),
 	})
 	if err != nil {
 		log.Fatalln("Unable to create client", err)
