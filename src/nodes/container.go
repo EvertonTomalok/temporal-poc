@@ -3,6 +3,7 @@ package nodes
 import (
 	"context"
 	"sync"
+	"temporal-poc/src/core"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -15,7 +16,7 @@ type ActivityContext struct {
 	StartTime       time.Time
 	TimeoutDuration time.Duration
 	EventTime       time.Time
-	EventType       string // "client-answered" or "timeout"
+	EventType       core.EventType
 }
 
 // ActivityProcessor is a function type that processes an activity
@@ -29,7 +30,7 @@ type NodeExecutionResult struct {
 	// Activity information - used by executor to call ExecuteActivity
 	ActivityName   string
 	ClientAnswered bool
-	EventType      string
+	EventType      core.EventType
 }
 
 // ActivityRegistry maintains the order of nodes to be executed dynamically

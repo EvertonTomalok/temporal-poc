@@ -140,7 +140,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 				Error:          nil,
 				ActivityName:   "wait_answer",
 				ClientAnswered: true,
-				EventType:      "client-answered",
+				EventType:      "success",
 			}
 		}
 

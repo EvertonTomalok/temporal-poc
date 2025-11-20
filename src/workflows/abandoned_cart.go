@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-poc/src/register"
+	"temporal-poc/src/validation"
 )
 
 var AbandonedCartWorkflowName = "abandoned_cart"
@@ -28,14 +29,41 @@ func AbandonedCartWorkflow(ctx workflow.Context) error {
 	// Initialize workflow state
 	startTime := workflow.Now(ctx)
 
-	// Build activity registry with node execution order
-	// Hardcoded for now: send_message first, then wait_answer, then notify_creator (if signal), then webhook (if timeout)
-	// This will be dynamically configured in the future (e.g., from a drag-and-drop UI)
-	registry := register.NewActivityRegistry("send_message", "wait_answer", "notify_creator", "webhook")
+	// Build workflow definition map
+	// This defines the workflow structure with conditional branching
+	// Future: This will be dynamically configured (e.g., from a drag-and-drop UI)
+	definition := register.WorkflowDefinition{
+		"step_1": {
+			Node: "send_message",
+			GoTo: "step_2",
+		},
+		"step_2": {
+			Node: "wait_answer",
+			Conditions: &register.Conditions{
+				Success: "step_3",
+				Timeout: "step_4",
+			},
+		},
+		"step_3": {
+			Node: "notify_creator",
+		},
+		"step_4": {
+			Node: "webhook",
+		},
+	}
 
-	// Execute workflow nodes - registry orchestrates the flow
-	// Starts with the first node (wait_answer), then continues to next node if instructed
-	// Timeout is now handled by individual nodes (e.g., wait_answer defines its own timeout)
+	// Validate workflow definition before starting execution
+	if err := validation.ValidateWorkflowDefinition(definition, "step_1"); err != nil {
+		logger.Error("AbandonedCartWorkflow: Workflow definition validation failed", "error", err)
+		return err
+	}
+
+	// Create registry with workflow definition
+	registry := register.NewActivityRegistryWithDefinition(definition, "step_1")
+
+	// Execute workflow nodes - registry orchestrates the flow using the map-based definition
+	// Starts with step_1 (send_message), then follows the workflow definition
+	// Conditional branching is handled based on event types returned by nodes (e.g., wait_answer returns "client-answered" or "timeout")
 	if err := registry.Execute(ctx, workflowID, startTime, 24*30*time.Hour); err != nil {
 		logger.Error("AbandonedCartWorkflow: Error executing workflow nodes", "error", err)
 		return err

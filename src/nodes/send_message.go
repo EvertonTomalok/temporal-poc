@@ -62,6 +62,6 @@ func SendMessageWorkflowNode(ctx workflow.Context, workflowID string, startTime 
 		Error:          nil,
 		ActivityName:   "send_message",
 		ClientAnswered: false,
-		EventType:      "message_sent",
+		EventType:      "success",
 	}
 }

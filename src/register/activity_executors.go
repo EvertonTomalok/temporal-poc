@@ -1,11 +1,42 @@
 package register
 
 import (
+	"fmt"
+	"temporal-poc/src/core"
 	"temporal-poc/src/nodes"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
 )
+
+// Conditions defines conditional branching with two possibilities: success and timeout
+// Can be expanded later if needed
+type Conditions struct {
+	Success string `json:"success"` // Next step when success event occurs (e.g., "step-3")
+	Timeout string `json:"timeout"` // Next step when timeout event occurs (e.g., "step-4")
+}
+
+func (c *Conditions) GetNextStep(eventType core.EventType) string {
+	switch eventType {
+	case core.EventTypeSuccess:
+		return c.Success
+	case core.EventTypeTimeout:
+		return c.Timeout
+	default:
+		return ""
+	}
+}
+
+// StepDefinition defines a single step in the workflow
+// It can have either a simple "go_to" for linear flow or "conditions" for conditional branching
+type StepDefinition struct {
+	Node       string      `json:"node"`       // The node name to execute
+	GoTo       string      `json:"go_to"`      // Next step for simple linear flow (optional)
+	Conditions *Conditions `json:"conditions"` // Conditional branching based on event types (optional)
+}
+
+// WorkflowDefinition defines the entire workflow structure as a map of step names to step definitions
+type WorkflowDefinition map[string]StepDefinition
 
 // ExecuteProcessNodeActivity executes the activity for a specific node
 // Uses the node name as the activity name so it appears correctly in the Temporal UI
@@ -50,60 +81,88 @@ type NodeExecutionResult = nodes.NodeExecutionResult
 // WorkflowNode is an alias for nodes.WorkflowNode
 type WorkflowNode = nodes.WorkflowNode
 
-// ActivityRegistry wraps nodes.ActivityRegistry to add methods
+// ActivityRegistry holds the workflow definition and execution state
 type ActivityRegistry struct {
-	*nodes.ActivityRegistry
+	Definition WorkflowDefinition // Workflow definition map
+	StartStep  string             // The starting step name
 }
 
-// RegisterWorkflowNode registers a workflow node for a given node name
-// DEPRECATED: Nodes now register directly with container
-func RegisterWorkflowNode(nodeName string, node WorkflowNode) {
-	// This is now a no-op as nodes register directly with container
-}
-
-// NewActivityRegistry creates a new activity registry with the specified node names
-// The node names define the execution order (e.g., ["wait_answer", "webhook"])
-func NewActivityRegistry(nodeNames ...string) *ActivityRegistry {
+// NewActivityRegistryWithDefinition creates a new activity registry with a workflow definition map
+// The definition maps step names to step definitions, allowing for conditional branching
+func NewActivityRegistryWithDefinition(definition WorkflowDefinition, startStep string) *ActivityRegistry {
 	return &ActivityRegistry{
-		ActivityRegistry: &nodes.ActivityRegistry{
-			NodeNames: nodeNames,
-		},
+		Definition: definition,
+		StartStep:  startStep,
 	}
 }
 
-// Execute orchestrates workflow nodes starting from the first node
-// It continues to the next node if the current node indicates to continue, otherwise stops
+// Execute orchestrates workflow nodes using the map-based definition
+// It handles conditional branching based on event types returned by nodes
 // All node execution goes through ExecuteActivity - this is the only entry point
 func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting workflow node orchestration", "count", len(r.NodeNames), "nodes", r.NodeNames)
+	logger.Info("Starting workflow node orchestration (map-based)", "start_step", r.StartStep)
 
-	// Execute nodes in order, starting from the first node
-	for i, nodeName := range r.NodeNames {
-		logger.Info("Executing node", "node_name", nodeName, "index", i+1, "total", len(r.NodeNames))
+	currentStep := r.StartStep
+	visitedSteps := make(map[string]bool) // Track visited steps to prevent infinite loops
 
-		// ExecuteActivity is the only entry point for executing nodes
-		// It handles both workflow node execution and activity execution
-		result, err := ExecuteActivity(ctx, nodeName, workflowID, startTime, timeoutDuration, r)
+	for {
+		// Check for infinite loops
+		if visitedSteps[currentStep] {
+			logger.Error("Circular workflow definition detected", "step", currentStep)
+			return fmt.Errorf("circular workflow definition detected at step: %s", currentStep)
+		}
+		visitedSteps[currentStep] = true
+
+		// Get step definition
+		stepDef, exists := r.Definition[currentStep]
+		if !exists {
+			logger.Error("Step definition not found", "step", currentStep)
+			return fmt.Errorf("step definition not found: %s", currentStep)
+		}
+
+		logger.Info("Executing step", "step", currentStep, "node", stepDef.Node)
+
+		// Execute the node for this step
+		result, err := ExecuteActivity(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, r)
 		if err != nil {
-			logger.Error("Node execution failed", "node_name", nodeName, "index", i+1, "error", err)
+			logger.Error("Node execution failed", "step", currentStep, "node", stepDef.Node, "error", err)
 			return err
 		}
 
-		logger.Info("Node completed", "node_name", nodeName, "index", i+1, "should_continue", result.ShouldContinue)
+		logger.Info("Step completed", "step", currentStep, "node", stepDef.Node, "event_type", result.EventType, "should_continue", result.ShouldContinue)
 
 		// If node indicates to stop, end the flow immediately
-		// This respects the ShouldContinue flag and stops remaining nodes from executing
 		if !result.ShouldContinue {
-			logger.Info("Node requested to stop flow", "node_name", nodeName, "remaining_nodes", len(r.NodeNames)-i-1)
+			logger.Info("Node requested to stop flow", "step", currentStep)
 			return nil
 		}
 
-		// Continue to next node
-	}
+		// Determine next step based on conditions or go_to
+		nextStep := ""
 
-	logger.Info("All workflow nodes completed")
-	return nil
+		// Check conditions first (conditional branching)
+		if stepDef.Conditions != nil && result.EventType != "" {
+			nextStep = stepDef.Conditions.GetNextStep(result.EventType)
+			if nextStep != "" {
+				logger.Info("Conditional branch selected", "step", currentStep, "event_type", result.EventType, "next_step", nextStep)
+			}
+		}
+
+		// If no condition matched, use go_to (linear flow)
+		if nextStep == "" && stepDef.GoTo != "" {
+			nextStep = stepDef.GoTo
+			logger.Info("Linear flow to next step", "step", currentStep, "next_step", nextStep)
+		}
+
+		// If no next step is defined, workflow ends
+		if nextStep == "" {
+			logger.Info("Workflow completed - no next step defined", "step", currentStep)
+			return nil
+		}
+
+		currentStep = nextStep
+	}
 }
 
 // ExecuteActivity is the ONLY entry point for executing nodes
@@ -126,7 +185,9 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 
 	// Execute the workflow node first (this waits for signals, handles timeouts, etc.)
 	logger.Info("ExecuteActivity: Executing workflow node", "node_name", nodeName)
-	result := workflowNode(ctx, workflowID, startTime, timeoutDuration, registry.ActivityRegistry)
+	// Create a temporary ActivityRegistry for backward compatibility with workflow nodes
+	tempRegistry := &nodes.ActivityRegistry{NodeNames: []string{}}
+	result := workflowNode(ctx, workflowID, startTime, timeoutDuration, tempRegistry)
 	if result.Error != nil {
 		logger.Error("Workflow node execution failed", "node_name", nodeName, "error", result.Error)
 		return result, result.Error
@@ -160,9 +221,4 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 
 	logger.Info("ExecuteActivity: Node completed", "node_name", nodeName)
 	return result, nil
-}
-
-// GetNodeOrder returns the current node execution order
-func (r *ActivityRegistry) GetNodeOrder() []string {
-	return r.NodeNames
 }

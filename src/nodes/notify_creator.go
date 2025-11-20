@@ -24,7 +24,7 @@ func processNotifyCreatorNode(ctx context.Context, activityCtx ActivityContext) 
 	// Only process if client answered (signal received)
 	// If this node is called but client didn't answer, it means it was called after timeout
 	// In that case, we should skip the notification
-	if !activityCtx.ClientAnswered || activityCtx.EventType != "client-answered" {
+	if !activityCtx.ClientAnswered || activityCtx.EventType != "success" {
 		logger.Info("Skipping notify creator - client did not answer (timeout occurred)")
 		return nil
 	}
@@ -70,6 +70,6 @@ func NotifyCreatorWorkflowNode(ctx workflow.Context, workflowID string, startTim
 		Error:          nil,
 		ActivityName:   "notify_creator",
 		ClientAnswered: true,
-		EventType:      "client-answered",
+		EventType:      "success",
 	}
 }

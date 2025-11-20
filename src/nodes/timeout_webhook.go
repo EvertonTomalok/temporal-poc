@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"context"
+	"temporal-poc/src/core"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -36,10 +37,6 @@ func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time
 	logger := workflow.GetLogger(ctx)
 	logger.Info("WebhookWorkflowNode: Processing webhook event")
 
-	// Determine event type based on whether client answered
-	// This is a simplified check - in a real scenario, you'd track this state
-	eventType := "webhook"
-
 	// Use workflow.Sleep instead of time.Sleep in workflow functions
 	workflow.Sleep(ctx, 2*time.Second)
 
@@ -51,7 +48,7 @@ func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time
 		Error:          nil,
 		ActivityName:   "webhook",
 		ClientAnswered: false,
-		EventType:      eventType,
+		EventType:      core.EventTypeTimeout,
 	}
 }
 
