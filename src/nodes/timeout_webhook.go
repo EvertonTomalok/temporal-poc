@@ -40,18 +40,21 @@ func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time
 
 	// Determine event type based on whether client answered
 	// This is a simplified check - in a real scenario, you'd track this state
-	// For now, we'll use a default event type
 	eventType := "webhook"
 
-	// Execute webhook activity
-	if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, false, eventType); err != nil {
-		logger.Error("WebhookWorkflowNode: Failed to execute webhook activities", "error", err)
-		return NodeExecutionResult{ShouldContinue: false, Error: err}
-	}
+	// Use workflow.Sleep instead of time.Sleep in workflow functions
+	workflow.Sleep(ctx, 2*time.Second)
 
 	logger.Info("WebhookWorkflowNode: Processing completed")
+	// Return result with activity information - executor will call ExecuteActivity
 	// Stop the flow after webhook processing
-	return NodeExecutionResult{ShouldContinue: false, Error: nil}
+	return NodeExecutionResult{
+		ShouldContinue: false,
+		Error:          nil,
+		ActivityName:   "webhook",
+		ClientAnswered: false,
+		EventType:      eventType,
+	}
 }
 
 // TimeoutWebhookNode handles timeout events and processes them
@@ -61,11 +64,8 @@ func TimeoutWebhookNode(ctx workflow.Context, workflowID string, startTime time.
 	logger := workflow.GetLogger(ctx)
 	logger.Info("TimeoutWebhookNode: Processing timeout event")
 
-	// Execute nodes in order (registry handles execution internally)
-	if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, false, "timeout"); err != nil {
-		logger.Error("TimeoutWebhookNode: Failed to execute nodes", "error", err)
-		return err
-	}
+	// Note: Activity execution should be handled by executor, not here
+	// This function is deprecated - use WebhookWorkflowNode instead
 
 	// Update memo to record timeout event
 	memo := map[string]interface{}{

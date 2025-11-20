@@ -127,7 +127,7 @@ func startWorkflowHandler(c echo.Context) error {
 
 // SendSignalRequest represents the request body for sending a signal
 type SendSignalRequest struct {
-	WorkflowID string `json:"workflow_id"`
+	WorkflowID string `json:"workflow_id,omitempty"`
 	RunID      string `json:"run_id,omitempty"`      // Optional: if empty, signals latest run
 	SignalName string `json:"signal_name,omitempty"` // Optional: defaults to "client-answered"
 }
@@ -146,16 +146,16 @@ func sendSignalHandler(c echo.Context) error {
 		})
 	}
 
-	if req.WorkflowID == "" {
+	if req.WorkflowID == "" && req.RunID == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "workflow_id is required",
+			"error": "workflow_id or run_id is required",
 		})
 	}
 
 	// Default signal name to "client-answered" if not provided
 	signalName := req.SignalName
 	if signalName == "" {
-		signalName = "client-answered"
+		signalName = core.ClientAnsweredSignal
 	}
 
 	// Send signal to workflow

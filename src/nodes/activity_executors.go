@@ -23,9 +23,14 @@ func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityC
 }
 
 // NodeExecutionResult indicates whether the workflow should continue to the next node or stop
+// It also contains information about the activity to execute
 type NodeExecutionResult struct {
 	ShouldContinue bool
 	Error          error
+	// Activity information - used by executor to call ExecuteActivity
+	ActivityName   string
+	ClientAnswered bool
+	EventType      string
 }
 
 // WorkflowNode is a function type that represents a workflow node
@@ -65,37 +70,29 @@ func NewActivityRegistry(nodeNames ...string) *ActivityRegistry {
 
 // Execute orchestrates workflow nodes starting from the first node
 // It continues to the next node if the current node indicates to continue, otherwise stops
+// All node execution goes through ExecuteActivity - this is the only entry point
 func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting workflow node orchestration", "count", len(r.nodeNames), "nodes", r.nodeNames)
 
 	// Execute nodes in order, starting from the first node
 	for i, nodeName := range r.nodeNames {
-		logger.Info("Executing workflow node", "node_name", nodeName, "index", i+1, "total", len(r.nodeNames))
+		logger.Info("Executing node", "node_name", nodeName, "index", i+1, "total", len(r.nodeNames))
 
-		// Get the workflow node from registry
-		workflowRegistry.mu.RLock()
-		workflowNode, exists := workflowRegistry.nodes[nodeName]
-		workflowRegistry.mu.RUnlock()
-
-		if !exists {
-			logger.Error("Unknown workflow node name", "node_name", nodeName)
-			// Continue to next node if unknown (don't fail workflow)
-			continue
+		// ExecuteActivity is the only entry point for executing nodes
+		// It handles both workflow node execution and activity execution
+		result, err := ExecuteActivity(ctx, nodeName, workflowID, startTime, timeoutDuration, r)
+		if err != nil {
+			logger.Error("Node execution failed", "node_name", nodeName, "index", i+1, "error", err)
+			return err
 		}
 
-		// Execute the workflow node
-		result := workflowNode(ctx, workflowID, startTime, timeoutDuration, r)
-		if result.Error != nil {
-			logger.Error("Workflow node execution failed", "node_name", nodeName, "index", i+1, "error", result.Error)
-			return result.Error
-		}
+		logger.Info("Node completed", "node_name", nodeName, "index", i+1, "should_continue", result.ShouldContinue)
 
-		logger.Info("Workflow node completed", "node_name", nodeName, "index", i+1, "should_continue", result.ShouldContinue)
-
-		// If node indicates to stop, end the flow
+		// If node indicates to stop, end the flow immediately
+		// This respects the ShouldContinue flag and stops remaining nodes from executing
 		if !result.ShouldContinue {
-			logger.Info("Workflow node requested to stop flow", "node_name", nodeName)
+			logger.Info("Node requested to stop flow", "node_name", nodeName, "remaining_nodes", len(r.nodeNames)-i-1)
 			return nil
 		}
 
@@ -106,33 +103,60 @@ func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, star
 	return nil
 }
 
-// ExecuteActivities executes activity nodes in order using the workflow context
-// This is used by workflow nodes to execute their associated activities
-func (r *ActivityRegistry) ExecuteActivities(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, clientAnswered bool, eventType string) error {
+// ExecuteActivity is the ONLY entry point for executing nodes
+// It first executes the workflow node (for signal waiting, etc.), then ExecuteProcessNodeActivity for the activity
+// ExecuteProcessNodeActivity is the only function allowed to run activity processors
+func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) (NodeExecutionResult, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Executing activity nodes in order", "count", len(r.nodeNames), "nodes", r.nodeNames)
+	logger.Info("ExecuteActivity: Executing node", "node_name", nodeName)
 
-	// Build activity context
+	// Get the workflow node from registry (workflow nodes handle signal waiting, timeouts, etc.)
+	workflowRegistry.mu.RLock()
+	workflowNode, exists := workflowRegistry.nodes[nodeName]
+	workflowRegistry.mu.RUnlock()
+
+	if !exists {
+		logger.Error("Unknown workflow node name", "node_name", nodeName)
+		return NodeExecutionResult{
+			ShouldContinue: false,
+			Error:          nil,
+		}, nil
+	}
+
+	// Execute the workflow node first (this waits for signals, handles timeouts, etc.)
+	logger.Info("ExecuteActivity: Executing workflow node", "node_name", nodeName)
+	result := workflowNode(ctx, workflowID, startTime, timeoutDuration, registry)
+	if result.Error != nil {
+		logger.Error("Workflow node execution failed", "node_name", nodeName, "error", result.Error)
+		return result, result.Error
+	}
+
+	// After workflow node completes, execute the activity processor via ExecuteProcessNodeActivity
+	// ExecuteProcessNodeActivity is the only function allowed to run activity processors
+	activityName := result.ActivityName
+	if activityName == "" {
+		activityName = nodeName
+	}
+
+	// Build activity context from workflow node result
 	activityCtx := ActivityContext{
 		WorkflowID:      workflowID,
-		ClientAnswered:  clientAnswered,
+		ClientAnswered:  result.ClientAnswered,
 		StartTime:       startTime,
 		TimeoutDuration: timeoutDuration,
 		EventTime:       workflow.Now(ctx),
-		EventType:       eventType,
+		EventType:       result.EventType,
 	}
 
-	// Execute each activity node in order
-	for i, nodeName := range r.nodeNames {
-		logger.Info("Executing activity node", "node_name", nodeName, "index", i+1, "total", len(r.nodeNames))
-		if err := ExecuteProcessNodeActivity(ctx, nodeName, activityCtx); err != nil {
-			logger.Error("Activity node execution failed", "node_name", nodeName, "index", i+1, "error", err)
-			return err
-		}
-		logger.Info("Activity node completed", "node_name", nodeName, "index", i+1)
+	// Execute the activity processor - ExecuteProcessNodeActivity is the only function allowed to run activity processors
+	logger.Info("ExecuteActivity: Calling ExecuteProcessNodeActivity", "node_name", nodeName, "activity_name", activityName)
+	if err := ExecuteProcessNodeActivity(ctx, activityName, activityCtx); err != nil {
+		logger.Error("Activity execution failed", "node_name", nodeName, "activity_name", activityName, "error", err)
+		return result, err
 	}
 
-	return nil
+	logger.Info("ExecuteActivity: Node completed", "node_name", nodeName)
+	return result, nil
 }
 
 // GetNodeOrder returns the current node execution order

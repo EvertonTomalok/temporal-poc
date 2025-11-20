@@ -58,12 +58,6 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 
 		if remaining <= 0 {
 			logger.Info("WaitAnswerWorkflowNode: Timeout reached before signal")
-			// Process timeout event - execute activities and continue to next node
-			if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, false, "timeout"); err != nil {
-				logger.Error("WaitAnswerWorkflowNode: Failed to execute timeout activities", "error", err)
-				return NodeExecutionResult{ShouldContinue: false, Error: err}
-			}
-
 			// Update memo to record timeout event
 			memo := map[string]interface{}{
 				"timeout_occurred": true,
@@ -75,8 +69,14 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 				logger.Error("WaitAnswerWorkflowNode: Failed to upsert memo", "error", err)
 			}
 
-			// Continue to next node after timeout
-			return NodeExecutionResult{ShouldContinue: true, Error: nil}
+			// Return result with activity information - executor will call ExecuteActivity
+			return NodeExecutionResult{
+				ShouldContinue: true,
+				Error:          nil,
+				ActivityName:   "wait_answer",
+				ClientAnswered: false,
+				EventType:      "timeout",
+			}
 		}
 
 		// Use selector to wait for signal or timeout
@@ -109,12 +109,6 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 
 		// After Select() returns, check if we should stop
 		if clientAnswered {
-			// Execute activities for client-answered event
-			if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, true, "client-answered"); err != nil {
-				logger.Error("WaitAnswerWorkflowNode: Failed to execute client-answered activities", "error", err)
-				return NodeExecutionResult{ShouldContinue: false, Error: err}
-			}
-
 			// Update search attributes from workflow context
 			err := workflow.UpsertTypedSearchAttributes(
 				ctx,
@@ -128,19 +122,19 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			}
 
 			logger.Info("WaitAnswerWorkflowNode: Processing completed")
-			// Continue to next node after client answered
-			return NodeExecutionResult{ShouldContinue: true, Error: nil}
+			// Return result with activity information - executor will call ExecuteActivity
+			return NodeExecutionResult{
+				ShouldContinue: false,
+				Error:          nil,
+				ActivityName:   "wait_answer",
+				ClientAnswered: true,
+				EventType:      "client-answered",
+			}
 		}
 
 		// Check if timer fired (timeout reached)
 		if timer != nil && timer.IsReady() {
 			logger.Info("WaitAnswerWorkflowNode: Timeout reached")
-			// Process timeout event - execute activities and continue to next node
-			if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, false, "timeout"); err != nil {
-				logger.Error("WaitAnswerWorkflowNode: Failed to execute timeout activities", "error", err)
-				return NodeExecutionResult{ShouldContinue: false, Error: err}
-			}
-
 			// Update memo to record timeout event
 			memo := map[string]interface{}{
 				"timeout_occurred": true,
@@ -152,8 +146,14 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 				logger.Error("WaitAnswerWorkflowNode: Failed to upsert memo", "error", err)
 			}
 
-			// Continue to next node after timeout
-			return NodeExecutionResult{ShouldContinue: true, Error: nil}
+			// Return result with activity information - executor will call ExecuteActivity
+			return NodeExecutionResult{
+				ShouldContinue: true,
+				Error:          nil,
+				ActivityName:   "wait_answer",
+				ClientAnswered: false,
+				EventType:      "timeout",
+			}
 		}
 	}
 
@@ -230,11 +230,7 @@ func ClientAnsweredNode(ctx workflow.Context, startTime time.Time, timeoutDurati
 
 		// After Select() returns, check if we should stop
 		if clientAnswered {
-			// Execute activities in order (registry handles execution internally)
-			if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, true, "client-answered"); err != nil {
-				logger.Error("ClientAnsweredNode: Failed to execute activities", "error", err)
-				return err
-			}
+			// Note: Activity execution is handled by executor, not here
 
 			// Update search attributes from workflow context
 			err := workflow.UpsertTypedSearchAttributes(
