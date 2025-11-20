@@ -29,9 +29,9 @@ func AbandonedCartWorkflow(ctx workflow.Context) error {
 	startTime := workflow.Now(ctx)
 
 	// Build activity registry with node execution order
-	// Hardcoded for now: send_message first, then wait_answer, then webhook (if needed)
+	// Hardcoded for now: send_message first, then wait_answer, then notify_creator (if signal), then webhook (if timeout)
 	// This will be dynamically configured in the future (e.g., from a drag-and-drop UI)
-	registry := register.NewActivityRegistry("send_message", "wait_answer", "webhook")
+	registry := register.NewActivityRegistry("send_message", "wait_answer", "notify_creator", "webhook")
 
 	// Execute workflow nodes - registry orchestrates the flow
 	// Starts with the first node (wait_answer), then continues to next node if instructed

@@ -134,8 +134,9 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 
 			logger.Info("WaitAnswerWorkflowNode: Processing completed")
 			// Return result with activity information - executor will call ExecuteActivity
+			// Continue to next node (notify_creator) when signal is received
 			return NodeExecutionResult{
-				ShouldContinue: false,
+				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
 				ClientAnswered: true,
