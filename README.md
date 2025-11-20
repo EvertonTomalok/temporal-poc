@@ -26,6 +26,20 @@ The workflow uses the Chain of Responsibility pattern where different handlers p
 - Go 1.23 or later
 - Temporal server running (default: localhost:7233)
 
+### Registering Search Attributes
+
+For search attributes to work (used for persistent, searchable client-answered tracking), you need to register them with Temporal server. When starting Temporal server, add:
+
+```bash
+temporal server start-dev \
+  --search-attribute ClientAnswered=Bool \
+  --search-attribute ClientAnsweredAt=Datetime
+```
+
+Or if using docker-compose, add these to your Temporal server configuration.
+
+**Note**: Search attributes are indexed and searchable, persisting in the visibility store (Elasticsearch/OpenSearch) for as long as the workflow execution exists. This makes them suitable for long-term searches (months from now), unlike memos which are not searchable and are deleted when workflows terminate.
+
 ## Running the POC
 
 ### 1. Start the Worker

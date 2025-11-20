@@ -3,19 +3,32 @@ package main
 import (
 	"fmt"
 	"log"
+	"log/slog"
+	"os"
 	"temporal-poc/src/core"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
+	tlog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/worker"
 )
 
 func main() {
-	// Create Temporal client
+	// Create a filtered logger to suppress HTTP 204 warnings
+	// Use slog with a simple text handler as the base logger
+	baseLogger := tlog.NewStructuredLogger(
+		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})),
+	)
+	filteredLogger := core.NewFilteredLogger(baseLogger)
+
+	// Create Temporal client with filtered logger
 	c, err := client.Dial(client.Options{
 		HostPort: client.DefaultHostPort,
 		Identity: fmt.Sprintf("worker-%s", uuid.New().String()),
+		Logger:   filteredLogger,
 	})
 	if err != nil {
 		log.Fatalln("Unable to create client", err)

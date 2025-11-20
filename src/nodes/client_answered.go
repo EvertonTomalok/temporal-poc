@@ -7,12 +7,16 @@ import (
 // ClientAnsweredHandler optionally waits for the "client-answered" signal and handles timeout
 type ClientAnsweredHandler struct {
 	BaseHandler
-	channel workflow.ReceiveChannel
+	channel                 workflow.ReceiveChannel
+	clientAnsweredProcessor *ClientAnsweredProcessorHandler
+	timeoutWebhookHandler   *TimeoutWebhookHandler
 }
 
 func NewClientAnsweredHandler(channel workflow.ReceiveChannel) *ClientAnsweredHandler {
 	return &ClientAnsweredHandler{
-		channel: channel,
+		channel:                 channel,
+		clientAnsweredProcessor: NewClientAnsweredProcessorHandler(),
+		timeoutWebhookHandler:   NewTimeoutWebhookHandler(),
 	}
 }
 
@@ -26,8 +30,9 @@ func (h *ClientAnsweredHandler) Handle(ctx workflow.Context, handlerCtx *Handler
 	// The selector will handle both buffered and future signals
 	selector.AddReceive(h.channel, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, nil) // Receive the signal (no payload needed)
-		handlerCtx.Logger.Info("client-answered signal received - completing workflow")
-		handlerCtx.ClientAnswered = true
+		handlerCtx.Logger.Info("client-answered signal received - routing to processor handler")
+		// Route to client-answered processor handler
+		h.clientAnsweredProcessor.Handle(ctx, handlerCtx, selector)
 	})
 
 	// Handle timeout: calculate remaining time
@@ -35,8 +40,9 @@ func (h *ClientAnsweredHandler) Handle(ctx workflow.Context, handlerCtx *Handler
 	remaining := handlerCtx.TimeoutDuration - elapsed
 
 	if remaining <= 0 {
-		handlerCtx.Logger.Info("1 minute timeout reached")
-		return Stop
+		handlerCtx.Logger.Info("1 minute timeout reached - routing to timeout webhook handler")
+		// Route to timeout webhook handler
+		return h.timeoutWebhookHandler.Handle(ctx, handlerCtx, selector)
 	}
 
 	// Only add timer if one doesn't already exist
@@ -49,7 +55,9 @@ func (h *ClientAnsweredHandler) Handle(ctx workflow.Context, handlerCtx *Handler
 
 		selector.AddFuture(timer, func(f workflow.Future) {
 			cancelTimer()
-			handlerCtx.Logger.Info("Timeout timer fired")
+			handlerCtx.Logger.Info("Timeout timer fired - routing to timeout webhook handler")
+			// Route to timeout webhook handler
+			h.timeoutWebhookHandler.Handle(ctx, handlerCtx, selector)
 		})
 	}
 
