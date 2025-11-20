@@ -9,20 +9,33 @@ import (
 
 // ExecuteProcessNodeActivity executes the activity for a specific node
 // Uses the node name as the activity name so it appears correctly in the Temporal UI
-func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityCtx ActivityContext) error {
+// Activities don't have timers - timers are only in workflow nodes
+// timeoutDuration is used to set the activity timeout - nodes handle their own timeout logic
+func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityCtx ActivityContext, timeoutDuration time.Duration) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("ExecuteProcessNodeActivity: Executing named activity", "node_name", nodeName)
 
-	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Second,
+	// Set activity timeout - activities should have reasonable timeouts (max 10 minutes)
+	// Use a reasonable default if timeoutDuration is too large or invalid
+	activityTimeout := 5 * time.Minute // Default to 5 minutes for activities
+	if timeoutDuration > 0 && timeoutDuration < 10*time.Minute {
+		// Use the provided timeout if it's reasonable (less than 10 minutes)
+		activityTimeout = timeoutDuration
 	}
-	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	// Set activity options with timeout before executing
+	// Activities require StartToCloseTimeout to be set
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: activityTimeout,
+	}
+	activityCtxWithOptions := workflow.WithActivityOptions(ctx, ao)
 
 	// Execute activity using node name as the activity name (appears in UI)
 	// The activity must be registered with this exact name in the worker
 	// Using string name ensures it appears correctly in Temporal UI
+	// Use activityCtxWithOptions for ExecuteActivity to ensure timeout is applied
 	var result error
-	err := workflow.ExecuteActivity(ctx, nodeName, activityCtx).Get(ctx, &result)
+	err := workflow.ExecuteActivity(activityCtxWithOptions, nodeName, activityCtx).Get(ctx, &result)
 	if err != nil {
 		logger.Error("ExecuteProcessNodeActivity: Activity execution failed", "node_name", nodeName, "error", err)
 		return err
@@ -158,8 +171,10 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 	}
 
 	// Execute the activity processor - ExecuteProcessNodeActivity is the only function allowed to run activity processors
+	// Activities don't have timers - timers are only in workflow nodes
+	// Pass timeoutDuration to the activity executor - nodes handle their own timeout logic
 	logger.Info("ExecuteActivity: Calling ExecuteProcessNodeActivity", "node_name", nodeName, "activity_name", activityName)
-	if err := ExecuteProcessNodeActivity(ctx, activityName, activityCtx); err != nil {
+	if err := ExecuteProcessNodeActivity(ctx, activityName, activityCtx, timeoutDuration); err != nil {
 		logger.Error("Activity execution failed", "node_name", nodeName, "activity_name", activityName, "error", err)
 		return result, err
 	}

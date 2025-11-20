@@ -19,7 +19,6 @@ func AbandonedCartWorkflow(ctx workflow.Context) error {
 
 	// Initialize workflow state
 	startTime := workflow.Now(ctx)
-	timeoutDuration := 1 * time.Minute
 
 	// Build activity registry with node execution order
 	// Hardcoded for now: send_message first, then wait_answer, then webhook (if needed)
@@ -28,7 +27,8 @@ func AbandonedCartWorkflow(ctx workflow.Context) error {
 
 	// Execute workflow nodes - registry orchestrates the flow
 	// Starts with the first node (wait_answer), then continues to next node if instructed
-	if err := registry.Execute(ctx, workflowID, startTime, timeoutDuration); err != nil {
+	// Timeout is now handled by individual nodes (e.g., wait_answer defines its own timeout)
+	if err := registry.Execute(ctx, workflowID, startTime, 24*30*time.Hour); err != nil {
 		logger.Error("AbandonedCartWorkflow: Error executing workflow nodes", "error", err)
 		return err
 	}

@@ -21,11 +21,12 @@ func init() {
 // processClientAnsweredProcessorNode processes the client-answered processor node
 func processClientAnsweredProcessorNode(ctx context.Context, activityCtx register.ActivityContext) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("Processing client-answered processor node", "workflow_id", activityCtx.WorkflowID)
+	logger.Info("Processing wait_answer activity", "workflow_id", activityCtx.WorkflowID)
+	logger.Info("wait_answer activity will wait up to 60 seconds for client-answered signal")
 
 	// This activity processes the client-answered event
-	// Note: Search attributes must be updated from workflow context, not activity context
-	// So we'll need to return information that the workflow can use to update search attributes
+	// Note: The actual waiting happens in the workflow node, not in the activity
+	// Search attributes must be updated from workflow context, not activity context
 	logger.Info("Client-answered processor node processed successfully")
 
 	return nil
@@ -33,12 +34,22 @@ func processClientAnsweredProcessorNode(ctx context.Context, activityCtx registe
 
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout
 // It returns whether to continue to the next node or stop the flow
+// This node will wait in a loop for a maximum of 60 seconds if no signal is received
 func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *register.ActivityRegistry) register.NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("WaitAnswerWorkflowNode: Waiting for client-answered signal or timeout")
+	logger.Info("WaitAnswerWorkflowNode: Starting wait_answer - will wait up to 60 seconds for client-answered signal")
+
+	// This node always uses its own fixed timeout (1 minute / 60 seconds)
+	// The workflow-level timeoutDuration is for the entire workflow, not individual nodes
+	waitAnswerTimeout := 1 * time.Minute
+	logger.Info("WaitAnswerWorkflowNode: Waiting for client-answered signal or timeout", "timeout_seconds", int(waitAnswerTimeout.Seconds()))
 
 	// Create channel for client-answered signal
 	clientAnsweredChannel := workflow.GetSignalChannel(ctx, "client-answered")
+
+	// Use the node's own start time (when this node starts executing)
+	// This ensures the timeout is calculated from when the node starts, not from workflow start
+	nodeStartTime := workflow.Now(ctx)
 
 	clientAnswered := false
 	var timer workflow.Future
@@ -55,9 +66,9 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			break
 		}
 
-		// Calculate remaining time
-		elapsed := workflow.Now(ctx).Sub(startTime)
-		remaining := timeoutDuration - elapsed
+		// Calculate remaining time from when this node started
+		elapsed := workflow.Now(ctx).Sub(nodeStartTime)
+		remaining := waitAnswerTimeout - elapsed
 
 		if remaining <= 0 {
 			logger.Info("WaitAnswerWorkflowNode: Timeout reached before signal")
@@ -162,108 +173,4 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 
 	// This should never be reached, but required for compilation
 	return register.NodeExecutionResult{ShouldContinue: false, Error: nil}
-}
-
-// ClientAnsweredNode handles waiting for client-answered signal and processing it
-// This function contains all the logic for handling client-answered events and timeout events
-// DEPRECATED: Use WaitAnswerWorkflowNode instead
-func ClientAnsweredNode(ctx workflow.Context, startTime time.Time, timeoutDuration time.Duration, workflowID string, registry *register.ActivityRegistry) error {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("ClientAnsweredNode: Waiting for client-answered signal or timeout")
-
-	// Create channel for client-answered signal
-	clientAnsweredChannel := workflow.GetSignalChannel(ctx, "client-answered")
-
-	clientAnswered := false
-	var timer workflow.Future
-	var cancelTimer workflow.CancelFunc
-
-	// Wait for signal or timeout
-	for {
-		// Check if client already answered
-		if clientAnswered {
-			if cancelTimer != nil {
-				cancelTimer()
-			}
-			logger.Info("ClientAnsweredNode: Client answered, processing")
-			break
-		}
-
-		// Calculate remaining time
-		elapsed := workflow.Now(ctx).Sub(startTime)
-		remaining := timeoutDuration - elapsed
-
-		if remaining <= 0 {
-			logger.Info("ClientAnsweredNode: Timeout reached before signal")
-			// Process timeout event
-			if err := TimeoutWebhookNode(ctx, workflowID, startTime, timeoutDuration, registry); err != nil {
-				logger.Error("ClientAnsweredNode: Error in TimeoutWebhookNode", "error", err)
-				return err
-			}
-			return nil // Timeout processed successfully
-		}
-
-		// Use selector to wait for signal or timeout
-		selector := workflow.NewSelector(ctx)
-
-		// Wait for client-answered signal
-		selector.AddReceive(clientAnsweredChannel, func(c workflow.ReceiveChannel, more bool) {
-			c.Receive(ctx, nil) // Receive the signal
-			logger.Info("ClientAnsweredNode: client-answered signal received")
-			clientAnswered = true
-			if cancelTimer != nil {
-				cancelTimer()
-			}
-		})
-
-		// Add timer if one doesn't already exist
-		if timer == nil {
-			timerCtx, cancel := workflow.WithCancel(ctx)
-			timer = workflow.NewTimer(timerCtx, remaining)
-			cancelTimer = cancel
-
-			selector.AddFuture(timer, func(f workflow.Future) {
-				cancel()
-				logger.Info("ClientAnsweredNode: Timeout timer fired")
-			})
-		}
-
-		// Wait for either signal or timeout
-		selector.Select(ctx)
-
-		// After Select() returns, check if we should stop
-		if clientAnswered {
-			// Note: Activity execution is handled by executor, not here
-
-			// Update search attributes from workflow context
-			err := workflow.UpsertTypedSearchAttributes(
-				ctx,
-				core.ClientAnsweredField.ValueSet(true),
-				core.ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
-			)
-			if err != nil {
-				logger.Error("ClientAnsweredNode: Failed to upsert search attributes", "error", err)
-			} else {
-				logger.Info("ClientAnsweredNode: Successfully upserted client-answered search attributes")
-			}
-
-			logger.Info("ClientAnsweredNode: Processing completed")
-			return nil // Client answered and processed successfully
-		}
-
-		// Check if timer fired (timeout reached)
-		if timer != nil && timer.IsReady() {
-			logger.Info("ClientAnsweredNode: Timeout reached")
-			// Process timeout event
-			if err := TimeoutWebhookNode(ctx, workflowID, startTime, timeoutDuration, registry); err != nil {
-				logger.Error("ClientAnsweredNode: Error in TimeoutWebhookNode", "error", err)
-				return err
-			}
-			return nil // Timeout processed successfully
-		}
-	}
-
-	// This should never be reached, but required for compilation
-	// If clientAnswered was true, we should have processed it and returned above
-	return nil
 }
