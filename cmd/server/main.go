@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"temporal-poc/src/core"
-	"temporal-poc/src/nodes"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
@@ -30,7 +29,7 @@ func init() {
 	// Register search attributes if they don't exist
 	// This MUST succeed before the server can handle workflow requests
 	log.Println("Checking and registering search attributes...")
-	if err := nodes.RegisterSearchAttributesIfNeeded(temporalClient); err != nil {
+	if err := core.RegisterSearchAttributesIfNeeded(temporalClient); err != nil {
 		log.Printf("ERROR: Failed to register search attributes automatically: %v", err)
 		log.Println("")
 		log.Println("Workflows will fail with BadSearchAttributes error if search attributes are not registered.")

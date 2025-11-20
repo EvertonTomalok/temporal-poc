@@ -6,17 +6,20 @@ import (
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
+
+	"temporal-poc/src/core"
+	"temporal-poc/src/register"
 )
 
 func init() {
 	// Auto-register the wait_answer activity
-	RegisterActivityProcessor("wait_answer", processClientAnsweredProcessorNode)
+	register.RegisterActivityProcessor("wait_answer", processClientAnsweredProcessorNode)
 	// Auto-register the wait_answer workflow node
-	RegisterWorkflowNode("wait_answer", WaitAnswerWorkflowNode)
+	register.RegisterWorkflowNode("wait_answer", WaitAnswerWorkflowNode)
 }
 
 // processClientAnsweredProcessorNode processes the client-answered processor node
-func processClientAnsweredProcessorNode(ctx context.Context, activityCtx ActivityContext) error {
+func processClientAnsweredProcessorNode(ctx context.Context, activityCtx register.ActivityContext) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("Processing client-answered processor node", "workflow_id", activityCtx.WorkflowID)
 
@@ -30,7 +33,7 @@ func processClientAnsweredProcessorNode(ctx context.Context, activityCtx Activit
 
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout
 // It returns whether to continue to the next node or stop the flow
-func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult {
+func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *register.ActivityRegistry) register.NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("WaitAnswerWorkflowNode: Waiting for client-answered signal or timeout")
 
@@ -70,7 +73,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			}
 
 			// Return result with activity information - executor will call ExecuteActivity
-			return NodeExecutionResult{
+			return register.NodeExecutionResult{
 				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
@@ -112,8 +115,8 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			// Update search attributes from workflow context
 			err := workflow.UpsertTypedSearchAttributes(
 				ctx,
-				ClientAnsweredField.ValueSet(true),
-				ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
+				core.ClientAnsweredField.ValueSet(true),
+				core.ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
 			)
 			if err != nil {
 				logger.Error("WaitAnswerWorkflowNode: Failed to upsert search attributes", "error", err)
@@ -123,7 +126,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 
 			logger.Info("WaitAnswerWorkflowNode: Processing completed")
 			// Return result with activity information - executor will call ExecuteActivity
-			return NodeExecutionResult{
+			return register.NodeExecutionResult{
 				ShouldContinue: false,
 				Error:          nil,
 				ActivityName:   "wait_answer",
@@ -147,7 +150,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			}
 
 			// Return result with activity information - executor will call ExecuteActivity
-			return NodeExecutionResult{
+			return register.NodeExecutionResult{
 				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
@@ -158,13 +161,13 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 	}
 
 	// This should never be reached, but required for compilation
-	return NodeExecutionResult{ShouldContinue: false, Error: nil}
+	return register.NodeExecutionResult{ShouldContinue: false, Error: nil}
 }
 
 // ClientAnsweredNode handles waiting for client-answered signal and processing it
 // This function contains all the logic for handling client-answered events and timeout events
 // DEPRECATED: Use WaitAnswerWorkflowNode instead
-func ClientAnsweredNode(ctx workflow.Context, startTime time.Time, timeoutDuration time.Duration, workflowID string, registry *ActivityRegistry) error {
+func ClientAnsweredNode(ctx workflow.Context, startTime time.Time, timeoutDuration time.Duration, workflowID string, registry *register.ActivityRegistry) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("ClientAnsweredNode: Waiting for client-answered signal or timeout")
 
@@ -235,8 +238,8 @@ func ClientAnsweredNode(ctx workflow.Context, startTime time.Time, timeoutDurati
 			// Update search attributes from workflow context
 			err := workflow.UpsertTypedSearchAttributes(
 				ctx,
-				ClientAnsweredField.ValueSet(true),
-				ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
+				core.ClientAnsweredField.ValueSet(true),
+				core.ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
 			)
 			if err != nil {
 				logger.Error("ClientAnsweredNode: Failed to upsert search attributes", "error", err)

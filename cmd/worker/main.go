@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"temporal-poc/src/core"
-	"temporal-poc/src/nodes"
+	"temporal-poc/src/register"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
@@ -31,7 +31,7 @@ func main() {
 	// Register search attributes if they don't exist
 	// This MUST succeed before workflows can run, otherwise workflows will fail with BadSearchAttributes
 	log.Println("Checking and registering search attributes...")
-	if err := nodes.RegisterSearchAttributesIfNeeded(c); err != nil {
+	if err := core.RegisterSearchAttributesIfNeeded(c); err != nil {
 		log.Printf("ERROR: Failed to register search attributes automatically: %v", err)
 		log.Println("")
 		log.Println("Workflows will fail with BadSearchAttributes error if search attributes are not registered.")
@@ -58,7 +58,7 @@ func main() {
 
 	// Register activities
 	// ProcessNodeActivity is a generic activity that processes nodes from /nodes directory
-	w.RegisterActivity(nodes.ProcessNodeActivity)
+	w.RegisterActivity(register.ProcessNodeActivity)
 
 	// Start worker
 	log.Println("Worker started, listening on task queue: primary-workflow-task-queue")

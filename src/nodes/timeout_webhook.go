@@ -6,17 +6,19 @@ import (
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
+
+	"temporal-poc/src/register"
 )
 
 func init() {
 	// Auto-register the webhook activity
-	RegisterActivityProcessor("webhook", processTimeoutWebhookNode)
+	register.RegisterActivityProcessor("webhook", processTimeoutWebhookNode)
 	// Auto-register the webhook workflow node
-	RegisterWorkflowNode("webhook", WebhookWorkflowNode)
+	register.RegisterWorkflowNode("webhook", WebhookWorkflowNode)
 }
 
 // processTimeoutWebhookNode processes the timeout webhook node
-func processTimeoutWebhookNode(ctx context.Context, activityCtx ActivityContext) error {
+func processTimeoutWebhookNode(ctx context.Context, activityCtx register.ActivityContext) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("Processing timeout webhook node", "workflow_id", activityCtx.WorkflowID)
 
@@ -34,7 +36,7 @@ func processTimeoutWebhookNode(ctx context.Context, activityCtx ActivityContext)
 
 // WebhookWorkflowNode is the workflow node that handles webhook processing
 // It returns whether to continue to the next node or stop the flow
-func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult {
+func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *register.ActivityRegistry) register.NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("WebhookWorkflowNode: Processing webhook event")
 
@@ -48,7 +50,7 @@ func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time
 	logger.Info("WebhookWorkflowNode: Processing completed")
 	// Return result with activity information - executor will call ExecuteActivity
 	// Stop the flow after webhook processing
-	return NodeExecutionResult{
+	return register.NodeExecutionResult{
 		ShouldContinue: false,
 		Error:          nil,
 		ActivityName:   "webhook",
@@ -60,7 +62,7 @@ func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time
 // TimeoutWebhookNode handles timeout events and processes them
 // This function contains all the logic for handling timeout events
 // DEPRECATED: Use WebhookWorkflowNode instead
-func TimeoutWebhookNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) error {
+func TimeoutWebhookNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *register.ActivityRegistry) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("TimeoutWebhookNode: Processing timeout event")
 

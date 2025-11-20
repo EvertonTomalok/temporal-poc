@@ -5,7 +5,7 @@ import (
 
 	"go.temporal.io/sdk/workflow"
 
-	"temporal-poc/src/nodes"
+	"temporal-poc/src/register"
 )
 
 // AbandonedCartWorkflow is an agnostic workflow that delegates to nodes
@@ -24,7 +24,7 @@ func AbandonedCartWorkflow(ctx workflow.Context) error {
 	// Build activity registry with node execution order
 	// Hardcoded for now: wait_answer first, then webhook
 	// This will be dynamically configured in the future (e.g., from a drag-and-drop UI)
-	registry := nodes.NewActivityRegistry("wait_answer", "webhook")
+	registry := register.NewActivityRegistry("wait_answer", "webhook")
 
 	// Execute workflow nodes - registry orchestrates the flow
 	// Starts with the first node (wait_answer), then continues to next node if instructed
