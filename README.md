@@ -1,16 +1,25 @@
 # Temporal Signal Collector POC
 
-This is a Proof of Concept demonstrating Temporal workflows that collect signals with messages over a 1-minute period.
+This is a Proof of Concept demonstrating Temporal workflows that wait for a "client-answered" signal or timeout after 1 minute. The workflow uses the Chain of Responsibility design pattern to handle different scenarios.
 
 ## Overview
 
-The workflow starts and waits for 1 minute to collect signals and their associated messages. After 1 minute, the workflow completes and returns all collected signals.
+The workflow starts and waits for either:
+- A "client-answered" signal (which causes immediate completion)
+- A 1-minute timeout (which causes completion after the timeout)
+
+The workflow uses the Chain of Responsibility pattern where different handlers process signals and timeouts.
 
 ## Structure
 
-- `workflows/workflow.go` - Defines the `SignalCollectorWorkflow` that waits for signals
-- `worker/main.go` - Contains the worker that processes workflow tasks
-- `client/main.go` - Contains the client that starts workflows and sends signals
+- `src/workflows/workflow.go` - Defines the `SignalCollectorWorkflow` that waits for signals
+- `src/nodes/` - Contains handler implementations using Chain of Responsibility pattern:
+  - `handler.go` - Base handler interface and chain management
+  - `client_answered.go` - Handler for "client-answered" signal
+  - `timeout.go` - Handler for timeout scenario
+- `cmd/worker/main.go` - Contains the worker that processes workflow tasks
+- `cmd/client/main.go` - Contains the client that starts workflows and waits for completion
+- `cmd/signal-sender/main.go` - Utility to send "client-answered" signal to a running workflow
 
 ## Prerequisites
 
@@ -24,34 +33,64 @@ The workflow starts and waits for 1 minute to collect signals and their associat
 In one terminal, start the worker:
 
 ```bash
-go run ./worker
+go run ./cmd/worker
 ```
 
 The worker will listen on the task queue `signal-collector-task-queue`.
 
 ### 2. Run the Client
 
-In another terminal, run the client to start a workflow and send signals:
+In another terminal, run the client to start a workflow:
 
 ```bash
-go run ./client
+go run ./cmd/client
 ```
 
 The client will:
 1. Start a new workflow
-2. Send 4 signals with messages (5 seconds apart)
-3. Wait for the workflow to complete (after 1 minute)
-4. Display all collected signals
+2. Wait for the workflow to complete (either by receiving "client-answered" signal or after 1 minute timeout)
+3. Display the workflow ID and completion status
+
+### 3. Send Signal (Optional)
+
+In a third terminal, you can send the "client-answered" signal to complete the workflow early:
+
+```bash
+go run ./cmd/signal-sender -workflow-id <WORKFLOW_ID>
+```
+
+Replace `<WORKFLOW_ID>` with the workflow ID printed by the client.
 
 ## How It Works
 
-1. The workflow starts and begins listening for signals on the `collect-signal` channel
-2. It uses a selector to wait for either:
-   - A signal arriving with a message
-   - A 1-minute timeout
-3. When a signal is received, it's stored with its message and timestamp
-4. After 1 minute, the workflow completes and returns all collected signals
-5. The client receives the results and displays them
+1. The workflow starts and initializes a Chain of Responsibility with two handlers:
+   - `ClientAnsweredHandler` - Listens for the "client-answered" signal
+   - `TimeoutHandler` - Sets up a timer for the 1-minute timeout
+
+2. The workflow enters a loop that:
+   - Calculates remaining time until timeout
+   - Uses a selector to wait for either:
+     - The "client-answered" signal (via ClientAnsweredHandler)
+     - The timeout timer (via TimeoutHandler)
+
+3. When the "client-answered" signal is received:
+   - The ClientAnsweredHandler sets `ClientAnswered = true`
+   - The workflow breaks out of the loop and completes immediately
+
+4. If the timeout is reached:
+   - The TimeoutHandler's timer fires
+   - The workflow breaks out of the loop and completes
+
+5. The client receives the workflow completion and displays the result
+
+## Chain of Responsibility Pattern
+
+This POC demonstrates the Chain of Responsibility design pattern in Temporal workflows:
+
+- **Handler Interface**: Each handler implements `SignalHandler` with a `Handle()` method
+- **Handler Chain**: Handlers are linked together, processing in sequence
+- **Selector Integration**: Each handler can add its own selectors (signal channels, timers) to the workflow selector
+- **Flexible Processing**: New handlers can be added to the chain without modifying existing code
 
 ## State Safety and Worker Restarts
 
@@ -73,32 +112,36 @@ When a worker picks up a workflow (or restarts):
    - `workflow.Now()` returns the time from history events
    - Signal channels replay signals in the exact order they were received
    - Timers replay based on history events
-   - Local variables (like `collectedSignals`, `startTime`, `clientAnswered`) are recomputed from the history
+   - Local variables (like `handlerCtx.StartTime`, `handlerCtx.ClientAnswered`) are recomputed from the history
 
 ### State Reconstruction
 
 In this workflow, all state is automatically reconstructed during replay:
 
-- `collectedSignals []SignalMessage` - Rebuilt by replaying all signal events in order
-- `startTime` - Set from the workflow start event
-- `clientAnswered` - Set when the "client-answered" signal event is replayed
-- Timer state - Derived from timer events in the history
+- `handlerCtx.StartTime` - Set from the workflow start event
+- `handlerCtx.ClientAnswered` - Set when the "client-answered" signal event is replayed
+- `handlerCtx.Timer` - Derived from timer events in the history
+- Handler chain state - Rebuilt by replaying signal and timer events in order
 
 ### Example: Worker Restart Scenario
 
 ```
 Worker A running workflow:
-  - Receives signal "collect-signal" with message "Hello"
-  - Appends to collectedSignals
+  - Starts workflow, initializes handler chain
+  - Sets up timeout timer
+  - Receives "client-answered" signal
+  - ClientAnsweredHandler processes signal → ClientAnswered = true
   - Worker A crashes 💥
 
 Worker B picks up the workflow:
   - Temporal sends workflow task with history
   - Worker B replays from beginning:
-    1. Replays workflow start event
-    2. Replays "collect-signal" event → collectedSignals = [SignalMessage{...}]
-    3. Continues from where Worker A left off
-  - Worker B continues execution seamlessly
+    1. Replays workflow start event → StartTime set
+    2. Replays handler chain initialization
+    3. Replays timeout timer setup
+    4. Replays "client-answered" signal event → ClientAnswered = true
+    5. Continues from where Worker A left off
+  - Worker B completes workflow seamlessly
 ```
 
 ### Why This Works
@@ -118,19 +161,26 @@ This is why Temporal workflows are durable and fault-tolerant: **state lives in 
 
 ## Example Output
 
-```
-Started workflow with ID: signal-collector-xxx and RunID: yyy
-Sending signals...
-Sent signal 1: Hello from signal 1
-Sent signal 2: Hello from signal 2
-Sent signal 3: Hello from signal 3
-Sent signal 4: Hello from signal 4
-Waiting for workflow to complete...
+### Client Output
 
-=== Workflow Results ===
-Total signals collected: 4
-Signal 1: Hello from signal 1 (received at: 2024-01-01T12:00:00Z)
-Signal 2: Hello from signal 2 (received at: 2024-01-01T12:00:05Z)
-Signal 3: Hello from signal 3 (received at: 2024-01-01T12:00:10Z)
-Signal 4: Hello from signal 4 (received at: 2024-01-01T12:00:15Z)
+```
+Workflow ID: signal-collector-abc123
+Started workflow with ID: signal-collector-abc123 and RunID: xyz789
+Waiting for 'client-answered' signal (max 1 minute)...
+Received 'client-answered' signal - workflow completed
+```
+
+Or if timeout occurs:
+
+```
+Workflow ID: signal-collector-abc123
+Started workflow with ID: signal-collector-abc123 and RunID: xyz789
+Waiting for 'client-answered' signal (max 1 minute)...
+Timeout: Did not receive 'client-answered' signal within 1 minute
+```
+
+### Signal Sender Output
+
+```
+Successfully sent 'client-answered' signal to workflow: signal-collector-abc123
 ```

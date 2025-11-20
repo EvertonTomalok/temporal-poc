@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	workflows "temporal-poc/src/workflows"
 	"time"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
-
-	"temporal-poc/workflows"
 )
 
 func main() {
@@ -42,8 +41,7 @@ func main() {
 	defer cancel()
 
 	// Wait for workflow to complete (which happens after receiving client-answered signal)
-	var result []workflows.SignalMessage
-	err = we.Get(ctx, &result)
+	err = we.Get(ctx, nil)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			log.Println("Timeout: Did not receive 'client-answered' signal within 1 minute")
