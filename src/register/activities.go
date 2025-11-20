@@ -2,52 +2,33 @@ package register
 
 import (
 	"context"
-	"sync"
-	"time"
+
+	"temporal-poc/src/nodes"
 
 	"go.temporal.io/sdk/activity"
 )
 
-// ActivityContext holds the context passed to activities
-type ActivityContext struct {
-	WorkflowID      string
-	ClientAnswered  bool
-	StartTime       time.Time
-	TimeoutDuration time.Duration
-	EventTime       time.Time
-	EventType       string // "client-answered" or "timeout"
-}
+// ActivityContext is an alias for nodes.ActivityContext
+type ActivityContext = nodes.ActivityContext
 
-// ActivityProcessor is a function type that processes an activity
-type ActivityProcessor func(ctx context.Context, activityCtx ActivityContext) error
+// ActivityProcessor is an alias for nodes.ActivityProcessor
+type ActivityProcessor = nodes.ActivityProcessor
 
-// Register is a singleton struct that holds registered activity processors
-type Register struct {
-	processors map[string]ActivityProcessor
-	mu         sync.RWMutex
-}
+// Register is kept for backward compatibility but now delegates to container
+// DEPRECATED: Use container directly instead
+type Register struct{}
 
-var (
-	instance *Register
-	once     sync.Once
-)
+var instance = &Register{}
 
 // GetInstance returns the singleton instance of Register
 func GetInstance() *Register {
-	once.Do(func() {
-		instance = &Register{
-			processors: make(map[string]ActivityProcessor),
-		}
-	})
 	return instance
 }
 
 // RegisterActivityProcessor registers an activity processor for a given node name
-// This is called automatically via init() functions in node files
+// DEPRECATED: Nodes now register directly with container
 func (r *Register) RegisterActivityProcessor(nodeName string, processor ActivityProcessor) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.processors[nodeName] = processor
+	// This is now a no-op as nodes register directly with container
 }
 
 // ProcessNodeActivity is a generic activity that processes a node
@@ -57,10 +38,7 @@ func (r *Register) ProcessNodeActivity(ctx context.Context, nodeName string, act
 	logger := activity.GetLogger(ctx)
 	logger.Info("ProcessNodeActivity: Processing node", "node_name", nodeName, "workflow_id", activityCtx.WorkflowID)
 
-	r.mu.RLock()
-	processor, exists := r.processors[nodeName]
-	r.mu.RUnlock()
-
+	processor, exists := nodes.GetProcessor(nodeName)
 	if !exists {
 		logger.Error("Unknown node name", "node_name", nodeName)
 		return nil // Don't fail workflow for unknown nodes
@@ -79,10 +57,7 @@ func (r *Register) GetNamedActivityFunction(nodeName string) func(context.Contex
 		logger := activity.GetLogger(ctx)
 		logger.Info("Processing node", "node_name", capturedNodeName, "workflow_id", activityCtx.WorkflowID)
 
-		r.mu.RLock()
-		processor, exists := r.processors[capturedNodeName]
-		r.mu.RUnlock()
-
+		processor, exists := nodes.GetProcessor(capturedNodeName)
 		if !exists {
 			logger.Error("Unknown node name", "node_name", capturedNodeName)
 			return nil // Don't fail workflow for unknown nodes
@@ -94,23 +69,16 @@ func (r *Register) GetNamedActivityFunction(nodeName string) func(context.Contex
 
 // AllProcessorsNames returns a slice of strings containing all registered processor names
 func (r *Register) AllProcessorsNames() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	nodeNames := make([]string, 0, len(r.processors))
-	for nodeName := range r.processors {
-		nodeNames = append(nodeNames, nodeName)
-	}
-	return nodeNames
+	return nodes.GetAllNodeNames()
 }
 
 // Legacy functions for backward compatibility
 // These delegate to the singleton instance
 
 // RegisterActivityProcessor registers an activity processor for a given node name
-// This is called automatically via init() functions in node files
+// DEPRECATED: Nodes now register directly with container
 func RegisterActivityProcessor(nodeName string, processor ActivityProcessor) {
-	GetInstance().RegisterActivityProcessor(nodeName, processor)
+	// This is now a no-op as nodes register directly with container
 }
 
 // ProcessNodeActivity is a generic activity that processes a node
@@ -129,6 +97,7 @@ func GetNamedActivityFunction(nodeName string) func(context.Context, ActivityCon
 
 // GetAllRegisteredNodeNames returns all registered node names
 // This is used to register all named activities in the worker
+// It gets the names from the nodes container to avoid circular imports
 func GetAllRegisteredNodeNames() []string {
-	return GetInstance().AllProcessorsNames()
+	return nodes.GetAllNodeNames()
 }

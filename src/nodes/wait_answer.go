@@ -8,18 +8,15 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-poc/src/core"
-	"temporal-poc/src/register"
 )
 
 func init() {
-	// Auto-register the wait_answer activity
-	register.RegisterActivityProcessor("wait_answer", processClientAnsweredProcessorNode)
-	// Auto-register the wait_answer workflow node
-	register.RegisterWorkflowNode("wait_answer", WaitAnswerWorkflowNode)
+	// Register node with container (processor and workflow node)
+	RegisterNode("wait_answer", processClientAnsweredProcessorNode, WaitAnswerWorkflowNode)
 }
 
 // processClientAnsweredProcessorNode processes the client-answered processor node
-func processClientAnsweredProcessorNode(ctx context.Context, activityCtx register.ActivityContext) error {
+func processClientAnsweredProcessorNode(ctx context.Context, activityCtx ActivityContext) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("Processing wait_answer activity", "workflow_id", activityCtx.WorkflowID)
 	logger.Info("wait_answer activity will wait up to 60 seconds for client-answered signal")
@@ -35,7 +32,7 @@ func processClientAnsweredProcessorNode(ctx context.Context, activityCtx registe
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout
 // It returns whether to continue to the next node or stop the flow
 // This node will wait in a loop for a maximum of 60 seconds if no signal is received
-func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *register.ActivityRegistry) register.NodeExecutionResult {
+func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("WaitAnswerWorkflowNode: Starting wait_answer - will wait up to 60 seconds for client-answered signal")
 
@@ -84,7 +81,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			}
 
 			// Return result with activity information - executor will call ExecuteActivity
-			return register.NodeExecutionResult{
+			return NodeExecutionResult{
 				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
@@ -137,7 +134,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 
 			logger.Info("WaitAnswerWorkflowNode: Processing completed")
 			// Return result with activity information - executor will call ExecuteActivity
-			return register.NodeExecutionResult{
+			return NodeExecutionResult{
 				ShouldContinue: false,
 				Error:          nil,
 				ActivityName:   "wait_answer",
@@ -161,7 +158,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			}
 
 			// Return result with activity information - executor will call ExecuteActivity
-			return register.NodeExecutionResult{
+			return NodeExecutionResult{
 				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
@@ -172,5 +169,5 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 	}
 
 	// This should never be reached, but required for compilation
-	return register.NodeExecutionResult{ShouldContinue: false, Error: nil}
+	return NodeExecutionResult{ShouldContinue: false, Error: nil}
 }

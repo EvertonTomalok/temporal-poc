@@ -3,7 +3,6 @@ package nodes
 import (
 	"context"
 	"math/rand"
-	"temporal-poc/src/register"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -11,14 +10,12 @@ import (
 )
 
 func init() {
-	// Auto-register the send_message activity
-	register.RegisterActivityProcessor("send_message", processSendMessageNode)
-	// Auto-register the send_message workflow node
-	register.RegisterWorkflowNode("send_message", SendMessageWorkflowNode)
+	// Register node with container (processor and workflow node)
+	RegisterNode("send_message", processSendMessageNode, SendMessageWorkflowNode)
 }
 
 // processSendMessageNode processes the send message node
-func processSendMessageNode(ctx context.Context, activityCtx register.ActivityContext) error {
+func processSendMessageNode(ctx context.Context, activityCtx ActivityContext) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("Processing send message node", "workflow_id", activityCtx.WorkflowID)
 
@@ -49,7 +46,7 @@ func processSendMessageNode(ctx context.Context, activityCtx register.ActivityCo
 
 // SendMessageWorkflowNode is the workflow node that handles sending a message
 // It orchestrates the message sending by executing the activity, then continues to the next node
-func SendMessageWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *register.ActivityRegistry) register.NodeExecutionResult {
+func SendMessageWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("SendMessageWorkflowNode: Orchestrating message sending")
 
@@ -60,7 +57,7 @@ func SendMessageWorkflowNode(ctx workflow.Context, workflowID string, startTime 
 	logger.Info("SendMessageWorkflowNode: Ready to execute activity, continuing to next node")
 	// Return result with activity information - executor will call ExecuteActivity
 	// Continue to next node (wait_answer) after activity completes
-	return register.NodeExecutionResult{
+	return NodeExecutionResult{
 		ShouldContinue: true,
 		Error:          nil,
 		ActivityName:   "send_message",

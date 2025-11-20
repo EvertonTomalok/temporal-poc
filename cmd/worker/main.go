@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"temporal-poc/src/core"
-	_ "temporal-poc/src/nodes" // Import nodes package to trigger init() functions that register nodes
 	"temporal-poc/src/register"
 	workflows "temporal-poc/src/workflows"
 

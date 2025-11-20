@@ -1,7 +1,7 @@
 package register
 
 import (
-	"sync"
+	"temporal-poc/src/nodes"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -44,49 +44,30 @@ func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityC
 	return result
 }
 
-// NodeExecutionResult indicates whether the workflow should continue to the next node or stop
-// It also contains information about the activity to execute
-type NodeExecutionResult struct {
-	ShouldContinue bool
-	Error          error
-	// Activity information - used by executor to call ExecuteActivity
-	ActivityName   string
-	ClientAnswered bool
-	EventType      string
-}
+// NodeExecutionResult is an alias for nodes.NodeExecutionResult
+type NodeExecutionResult = nodes.NodeExecutionResult
 
-// WorkflowNode is a function type that represents a workflow node
-// It returns whether to continue to the next node and any error
-type WorkflowNode func(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult
+// WorkflowNode is an alias for nodes.WorkflowNode
+type WorkflowNode = nodes.WorkflowNode
 
-// workflowNodeRegistry is a container that holds registered workflow nodes
-type workflowNodeRegistry struct {
-	nodes map[string]WorkflowNode
-	mu    sync.RWMutex
-}
-
-var workflowRegistry = &workflowNodeRegistry{
-	nodes: make(map[string]WorkflowNode),
+// ActivityRegistry wraps nodes.ActivityRegistry to add methods
+type ActivityRegistry struct {
+	*nodes.ActivityRegistry
 }
 
 // RegisterWorkflowNode registers a workflow node for a given node name
-// This is called automatically via init() functions in node files
+// DEPRECATED: Nodes now register directly with container
 func RegisterWorkflowNode(nodeName string, node WorkflowNode) {
-	workflowRegistry.mu.Lock()
-	defer workflowRegistry.mu.Unlock()
-	workflowRegistry.nodes[nodeName] = node
-}
-
-// ActivityRegistry maintains the order of nodes to be executed dynamically
-type ActivityRegistry struct {
-	nodeNames []string // Ordered list of node names to execute
+	// This is now a no-op as nodes register directly with container
 }
 
 // NewActivityRegistry creates a new activity registry with the specified node names
 // The node names define the execution order (e.g., ["wait_answer", "webhook"])
 func NewActivityRegistry(nodeNames ...string) *ActivityRegistry {
 	return &ActivityRegistry{
-		nodeNames: nodeNames,
+		ActivityRegistry: &nodes.ActivityRegistry{
+			NodeNames: nodeNames,
+		},
 	}
 }
 
@@ -95,11 +76,11 @@ func NewActivityRegistry(nodeNames ...string) *ActivityRegistry {
 // All node execution goes through ExecuteActivity - this is the only entry point
 func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting workflow node orchestration", "count", len(r.nodeNames), "nodes", r.nodeNames)
+	logger.Info("Starting workflow node orchestration", "count", len(r.NodeNames), "nodes", r.NodeNames)
 
 	// Execute nodes in order, starting from the first node
-	for i, nodeName := range r.nodeNames {
-		logger.Info("Executing node", "node_name", nodeName, "index", i+1, "total", len(r.nodeNames))
+	for i, nodeName := range r.NodeNames {
+		logger.Info("Executing node", "node_name", nodeName, "index", i+1, "total", len(r.NodeNames))
 
 		// ExecuteActivity is the only entry point for executing nodes
 		// It handles both workflow node execution and activity execution
@@ -114,7 +95,7 @@ func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, star
 		// If node indicates to stop, end the flow immediately
 		// This respects the ShouldContinue flag and stops remaining nodes from executing
 		if !result.ShouldContinue {
-			logger.Info("Node requested to stop flow", "node_name", nodeName, "remaining_nodes", len(r.nodeNames)-i-1)
+			logger.Info("Node requested to stop flow", "node_name", nodeName, "remaining_nodes", len(r.NodeNames)-i-1)
 			return nil
 		}
 
@@ -132,10 +113,8 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 	logger := workflow.GetLogger(ctx)
 	logger.Info("ExecuteActivity: Executing node", "node_name", nodeName)
 
-	// Get the workflow node from registry (workflow nodes handle signal waiting, timeouts, etc.)
-	workflowRegistry.mu.RLock()
-	workflowNode, exists := workflowRegistry.nodes[nodeName]
-	workflowRegistry.mu.RUnlock()
+	// Get the workflow node from nodes (workflow nodes handle signal waiting, timeouts, etc.)
+	workflowNode, exists := nodes.GetWorkflowNode(nodeName)
 
 	if !exists {
 		logger.Error("Unknown workflow node name", "node_name", nodeName)
@@ -147,7 +126,7 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 
 	// Execute the workflow node first (this waits for signals, handles timeouts, etc.)
 	logger.Info("ExecuteActivity: Executing workflow node", "node_name", nodeName)
-	result := workflowNode(ctx, workflowID, startTime, timeoutDuration, registry)
+	result := workflowNode(ctx, workflowID, startTime, timeoutDuration, registry.ActivityRegistry)
 	if result.Error != nil {
 		logger.Error("Workflow node execution failed", "node_name", nodeName, "error", result.Error)
 		return result, result.Error
@@ -185,5 +164,5 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 
 // GetNodeOrder returns the current node execution order
 func (r *ActivityRegistry) GetNodeOrder() []string {
-	return r.nodeNames
+	return r.NodeNames
 }

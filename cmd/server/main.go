@@ -170,19 +170,6 @@ func sendSignalHandler(c echo.Context) error {
 			})
 		}
 		workflowID = foundWorkflowID
-
-		// Terminate the workflow
-		err = temporalClient.TerminateWorkflow(context.Background(), workflowID, runID, "Terminated via API with run_id only", nil)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": fmt.Sprintf("Unable to terminate workflow: %v", err),
-			})
-		}
-
-		response := SendSignalResponse{
-			Message: fmt.Sprintf("Successfully terminated workflow with run_id: %s (workflow_id: %s)", runID, workflowID),
-		}
-		return c.JSON(http.StatusOK, response)
 	}
 
 	// Default signal name to "client-answered" if not provided
