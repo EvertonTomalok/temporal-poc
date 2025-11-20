@@ -8,11 +8,11 @@ import (
 	"temporal-poc/src/nodes"
 )
 
-// SignalCollectorWorkflow waits for 1 minute or completes when it receives the "client-answered" signal
+// AbandonedCartWorkflow waits for 1 minute or completes when it receives the "client-answered" signal
 // Uses Chain of Responsibility pattern where nodes handle signals
-func SignalCollectorWorkflow(ctx workflow.Context) error {
+func AbandonedCartWorkflow(ctx workflow.Context) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("SignalCollectorWorkflow started")
+	logger.Info("AbandonedCartWorkflow started")
 
 	// Create channel for client-answered signal
 	clientAnsweredChannel := workflow.GetSignalChannel(ctx, "client-answered")

@@ -1,4 +1,4 @@
-# Temporal Signal Collector POC
+# Temporal Abandoned Cart POC
 
 This is a Proof of Concept demonstrating Temporal workflows that wait for a "client-answered" signal or timeout after 1 minute. The workflow uses the Chain of Responsibility design pattern to handle different scenarios.
 
@@ -12,7 +12,7 @@ The workflow uses the Chain of Responsibility pattern where different handlers p
 
 ## Structure
 
-- `src/workflows/workflow.go` - Defines the `SignalCollectorWorkflow` that waits for signals
+- `src/workflows/workflow.go` - Defines the `AbandonedCartWorkflow` that waits for signals
 - `src/nodes/` - Contains handler implementations using Chain of Responsibility pattern:
   - `handler.go` - Base handler interface and chain management
   - `client_answered.go` - Handler for "client-answered" signal
@@ -50,7 +50,7 @@ In one terminal, start the worker:
 go run ./cmd/worker
 ```
 
-The worker will listen on the task queue `signal-collector-task-queue`.
+The worker will listen on the task queue `primary-workflow-task-queue`.
 
 ### 2. Run the Client
 
@@ -178,8 +178,8 @@ This is why Temporal workflows are durable and fault-tolerant: **state lives in 
 ### Client Output
 
 ```
-Workflow ID: signal-collector-abc123
-Started workflow with ID: signal-collector-abc123 and RunID: xyz789
+Workflow ID: abandonedCart-abc123
+Started workflow with ID: abandonedCart-abc123 and RunID: xyz789
 Waiting for 'client-answered' signal (max 1 minute)...
 Received 'client-answered' signal - workflow completed
 ```
@@ -187,8 +187,8 @@ Received 'client-answered' signal - workflow completed
 Or if timeout occurs:
 
 ```
-Workflow ID: signal-collector-abc123
-Started workflow with ID: signal-collector-abc123 and RunID: xyz789
+Workflow ID: abandonedCart-abc123
+Started workflow with ID: abandonedCart-abc123 and RunID: xyz789
 Waiting for 'client-answered' signal (max 1 minute)...
 Timeout: Did not receive 'client-answered' signal within 1 minute
 ```
@@ -196,5 +196,5 @@ Timeout: Did not receive 'client-answered' signal within 1 minute
 ### Signal Sender Output
 
 ```
-Successfully sent 'client-answered' signal to workflow: signal-collector-abc123
+Successfully sent 'client-answered' signal to workflow: abandonedCart-abc123
 ```

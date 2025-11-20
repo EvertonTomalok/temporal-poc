@@ -23,11 +23,11 @@ func main() {
 
 	// Start workflow
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        "signal-collector-" + uuid.New().String(),
+		ID:        "abandonedCart-" + uuid.New().String(),
 		TaskQueue: core.PrimaryWorkflowTaskQueue,
 	}
 
-	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, workflows.SignalCollectorWorkflow)
+	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, workflows.AbandonedCartWorkflow)
 	if err != nil {
 		log.Fatalln("Unable to execute workflow", err)
 	}

@@ -54,7 +54,7 @@ func main() {
 	w := worker.New(c, core.PrimaryWorkflowTaskQueue, worker.Options{})
 
 	// Register workflow
-	w.RegisterWorkflow(workflows.SignalCollectorWorkflow)
+	w.RegisterWorkflow(workflows.AbandonedCartWorkflow)
 
 	// Start worker
 	log.Println("Worker started, listening on task queue: primary-workflow-task-queue")

@@ -99,7 +99,7 @@ func startWorkflowHandler(c echo.Context) error {
 	// Generate workflow ID if not provided
 	workflowID := req.WorkflowID
 	if workflowID == "" {
-		workflowID = "signal-collector-" + uuid.New().String()
+		workflowID = "abandonedCart-" + uuid.New().String()
 	}
 
 	// Start workflow
@@ -108,7 +108,7 @@ func startWorkflowHandler(c echo.Context) error {
 		TaskQueue: core.PrimaryWorkflowTaskQueue,
 	}
 
-	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.SignalCollectorWorkflow)
+	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.AbandonedCartWorkflow)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to execute workflow: %v", err),
