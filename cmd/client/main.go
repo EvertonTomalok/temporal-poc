@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"temporal-poc/src/core"
+	_ "temporal-poc/src/nodes" // Import nodes package to trigger init() functions that register nodes
 	workflows "temporal-poc/src/workflows"
 	"time"
 

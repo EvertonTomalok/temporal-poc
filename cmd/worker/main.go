@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log"
 	"temporal-poc/src/core"
+	_ "temporal-poc/src/nodes" // Import nodes package to trigger init() functions that register nodes
 	"temporal-poc/src/register"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
@@ -56,9 +58,22 @@ func main() {
 	// Register workflow
 	w.RegisterWorkflow(workflows.AbandonedCartWorkflow)
 
-	// Register activities
-	// ProcessNodeActivity is a generic activity that processes nodes from /nodes directory
-	w.RegisterActivity(register.ProcessNodeActivity)
+	// Register all named activities so they appear with node names in the Temporal UI
+	// Each activity is registered with its node name so it appears correctly in the UI
+	nodeNames := register.GetAllRegisteredNodeNames()
+	log.Printf("Registering %d named activities for UI display", len(nodeNames))
+	for _, nodeName := range nodeNames {
+		// Create a closure that captures the nodeName to avoid loop variable issues
+		nodeName := nodeName
+		namedActivity := register.GetNamedActivityFunction(nodeName)
+		w.RegisterActivityWithOptions(namedActivity, activity.RegisterOptions{
+			Name: nodeName,
+		})
+		log.Printf("  Registered activity: %s", nodeName)
+	}
+
+	// Note: ProcessNodeActivity is no longer registered to force use of named activities
+	// This ensures the correct node name appears in the Temporal UI
 
 	// Start worker
 	log.Println("Worker started, listening on task queue: primary-workflow-task-queue")

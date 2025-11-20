@@ -7,18 +7,27 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// ExecuteProcessNodeActivity executes the ProcessNodeActivity for a specific node
+// ExecuteProcessNodeActivity executes the activity for a specific node
+// Uses the node name as the activity name so it appears correctly in the Temporal UI
 func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityCtx ActivityContext) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("ExecuteProcessNodeActivity: Executing named activity", "node_name", nodeName)
+
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Second,
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
+	// Execute activity using node name as the activity name (appears in UI)
+	// The activity must be registered with this exact name in the worker
+	// Using string name ensures it appears correctly in Temporal UI
 	var result error
-	err := workflow.ExecuteActivity(ctx, ProcessNodeActivity, nodeName, activityCtx).Get(ctx, &result)
+	err := workflow.ExecuteActivity(ctx, nodeName, activityCtx).Get(ctx, &result)
 	if err != nil {
+		logger.Error("ExecuteProcessNodeActivity: Activity execution failed", "node_name", nodeName, "error", err)
 		return err
 	}
+	logger.Info("ExecuteProcessNodeActivity: Activity completed", "node_name", nodeName)
 	return result
 }
 
