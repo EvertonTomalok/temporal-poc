@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 )
 
@@ -151,6 +152,39 @@ func sendSignalHandler(c echo.Context) error {
 		})
 	}
 
+	workflowID := req.WorkflowID
+	runID := req.RunID
+
+	// If only runID is provided, we need to find the workflowID first and then terminate the workflow
+	if workflowID == "" && runID != "" {
+		// Find workflow execution by runID
+		foundWorkflowID, err := findWorkflowIDByRunID(context.Background(), runID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": fmt.Sprintf("Unable to find workflow by run_id: %v", err),
+			})
+		}
+		if foundWorkflowID == "" {
+			return c.JSON(http.StatusNotFound, map[string]string{
+				"error": fmt.Sprintf("No workflow found with run_id: %s", runID),
+			})
+		}
+		workflowID = foundWorkflowID
+
+		// Terminate the workflow
+		err = temporalClient.TerminateWorkflow(context.Background(), workflowID, runID, "Terminated via API with run_id only", nil)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": fmt.Sprintf("Unable to terminate workflow: %v", err),
+			})
+		}
+
+		response := SendSignalResponse{
+			Message: fmt.Sprintf("Successfully terminated workflow with run_id: %s (workflow_id: %s)", runID, workflowID),
+		}
+		return c.JSON(http.StatusOK, response)
+	}
+
 	// Default signal name to "client-answered" if not provided
 	signalName := req.SignalName
 	if signalName == "" {
@@ -159,8 +193,7 @@ func sendSignalHandler(c echo.Context) error {
 
 	// Send signal to workflow
 	// Use empty RunID to signal the latest run if not provided
-	runID := req.RunID
-	err := temporalClient.SignalWorkflow(context.Background(), req.WorkflowID, runID, signalName, nil)
+	err := temporalClient.SignalWorkflow(context.Background(), workflowID, runID, signalName, nil)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to signal workflow: %v", err),
@@ -169,8 +202,65 @@ func sendSignalHandler(c echo.Context) error {
 
 	// Return response
 	response := SendSignalResponse{
-		Message: fmt.Sprintf("Successfully sent '%s' signal to workflow: %s", signalName, req.WorkflowID),
+		Message: fmt.Sprintf("Successfully sent '%s' signal to workflow: %s", signalName, workflowID),
 	}
 
 	return c.JSON(http.StatusOK, response)
+}
+
+// findWorkflowIDByRunID searches for a workflow execution by runID and returns its workflowID
+func findWorkflowIDByRunID(ctx context.Context, runID string) (string, error) {
+	// List open workflows and search for the matching runID
+	var nextPageToken []byte
+	for {
+		resp, err := temporalClient.ListOpenWorkflow(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       client.DefaultNamespace,
+			MaximumPageSize: 100,
+			NextPageToken:   nextPageToken,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		// Search through the results for matching runID
+		for _, exec := range resp.Executions {
+			if exec.Execution.RunId == runID {
+				return exec.Execution.WorkflowId, nil
+			}
+		}
+
+		// Check if there are more pages
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			break
+		}
+	}
+
+	// If not found in open workflows, try closed workflows
+	nextPageToken = nil
+	for {
+		resp, err := temporalClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace:     client.DefaultNamespace,
+			PageSize:      100,
+			NextPageToken: nextPageToken,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		// Search through the results for matching runID
+		for _, exec := range resp.Executions {
+			if exec.Execution.RunId == runID {
+				return exec.Execution.WorkflowId, nil
+			}
+		}
+
+		// Check if there are more pages
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			break
+		}
+	}
+
+	return "", nil // Not found
 }
