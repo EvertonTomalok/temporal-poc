@@ -56,6 +56,10 @@ func main() {
 	// Register workflow
 	w.RegisterWorkflow(workflows.AbandonedCartWorkflow)
 
+	// Register activities
+	// ProcessNodeActivity is a generic activity that processes nodes from /nodes directory
+	w.RegisterActivity(nodes.ProcessNodeActivity)
+
 	// Start worker
 	log.Println("Worker started, listening on task queue: primary-workflow-task-queue")
 	err = w.Run(worker.InterruptCh())

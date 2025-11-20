@@ -1,43 +1,86 @@
 package nodes
 
 import (
+	"context"
+	"time"
+
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
 )
 
-// TimeoutWebhookHandler handles timeout by faking a webhook call (just prints)
-type TimeoutWebhookHandler struct {
-	BaseHandler
+func init() {
+	// Auto-register the webhook activity
+	RegisterActivityProcessor("webhook", processTimeoutWebhookNode)
+	// Auto-register the webhook workflow node
+	RegisterWorkflowNode("webhook", WebhookWorkflowNode)
 }
 
-func NewTimeoutWebhookHandler() *TimeoutWebhookHandler {
-	return &TimeoutWebhookHandler{}
+// processTimeoutWebhookNode processes the timeout webhook node
+func processTimeoutWebhookNode(ctx context.Context, activityCtx ActivityContext) error {
+	logger := activity.GetLogger(ctx)
+	logger.Info("Processing timeout webhook node", "workflow_id", activityCtx.WorkflowID)
+
+	// Simulate webhook call
+	logger.Info("WEBHOOK CALL: POST /webhook/timeout")
+	logger.Info("WEBHOOK PAYLOAD", "event", "timeout", "workflow_id", activityCtx.WorkflowID)
+	logger.Info("WEBHOOK RESPONSE: 200 OK")
+
+	// Note: Memo updates must be done from workflow context, not activity context
+	// So we'll need to return information that the workflow can use to update memo
+	logger.Info("Timeout webhook node processed successfully")
+
+	return nil
 }
 
-func (h *TimeoutWebhookHandler) Handle(ctx workflow.Context, handlerCtx *HandlerContext, selector workflow.Selector) HandlerResult {
-	handlerCtx.Logger.Info("Timeout reached - faking webhook call")
+// WebhookWorkflowNode is the workflow node that handles webhook processing
+// It returns whether to continue to the next node or stop the flow
+func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("WebhookWorkflowNode: Processing webhook event")
 
-	// Fake webhook call - just print/log
-	handlerCtx.Logger.Info("FAKE WEBHOOK CALL: POST /webhook/timeout")
-	handlerCtx.Logger.Info("FAKE WEBHOOK PAYLOAD: { \"event\": \"timeout\", \"workflow_id\": \"" + workflow.GetInfo(ctx).WorkflowExecution.ID + "\" }")
-	handlerCtx.Logger.Info("FAKE WEBHOOK RESPONSE: 200 OK")
+	// Determine event type based on whether client answered
+	// This is a simplified check - in a real scenario, you'd track this state
+	// For now, we'll use a default event type
+	eventType := "webhook"
+
+	// Execute webhook activity
+	if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, false, eventType); err != nil {
+		logger.Error("WebhookWorkflowNode: Failed to execute webhook activities", "error", err)
+		return NodeExecutionResult{ShouldContinue: false, Error: err}
+	}
+
+	logger.Info("WebhookWorkflowNode: Processing completed")
+	// Stop the flow after webhook processing
+	return NodeExecutionResult{ShouldContinue: false, Error: nil}
+}
+
+// TimeoutWebhookNode handles timeout events and processes them
+// This function contains all the logic for handling timeout events
+// DEPRECATED: Use WebhookWorkflowNode instead
+func TimeoutWebhookNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("TimeoutWebhookNode: Processing timeout event")
+
+	// Execute nodes in order (registry handles execution internally)
+	if err := registry.ExecuteActivities(ctx, workflowID, startTime, timeoutDuration, false, "timeout"); err != nil {
+		logger.Error("TimeoutWebhookNode: Failed to execute nodes", "error", err)
+		return err
+	}
 
 	// Update memo to record timeout event
 	memo := map[string]interface{}{
 		"timeout_occurred": true,
 		"timeout_at":       workflow.Now(ctx).UTC(),
 		"event":            "timeout",
-		"workflow_id":      workflow.GetInfo(ctx).WorkflowExecution.ID,
+		"workflow_id":      workflowID,
 	}
 	err := workflow.UpsertMemo(ctx, memo)
 	if err != nil {
-		handlerCtx.Logger.Error("Failed to upsert memo", "error", err)
+		logger.Error("TimeoutWebhookNode: Failed to upsert memo", "error", err)
 	} else {
-		handlerCtx.Logger.Info("Successfully updated memo with timeout information")
+		logger.Info("TimeoutWebhookNode: Successfully updated memo with timeout information")
 	}
 
-	// Continue to next handler if exists
-	if h.next != nil {
-		return h.next.Handle(ctx, handlerCtx, selector)
-	}
-	return Stop
+	logger.Info("TimeoutWebhookNode: Processing completed")
+	return nil
 }
