@@ -35,7 +35,7 @@ func main() {
 	workflowID := we.GetID()
 	log.Printf("Workflow ID: %s\n", workflowID)
 	log.Printf("Started workflow with ID: %s and RunID: %s\n", workflowID, we.GetRunID())
-	log.Printf("go run ./cmd/signal-sender -workflow-id %s to send 'client-answered' signal\n", workflowID)
+	log.Printf("\n-> go run ./cmd/signal-sender -workflow-id \n %s to send 'client-answered' signal\n", workflowID)
 
 	// Wait for client-answered signal with 1 minute timeout
 	log.Println("Waiting for 'client-answered' signal (max 1 minute)...")

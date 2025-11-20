@@ -21,6 +21,20 @@ func (h *TimeoutWebhookHandler) Handle(ctx workflow.Context, handlerCtx *Handler
 	handlerCtx.Logger.Info("FAKE WEBHOOK PAYLOAD: { \"event\": \"timeout\", \"workflow_id\": \"" + workflow.GetInfo(ctx).WorkflowExecution.ID + "\" }")
 	handlerCtx.Logger.Info("FAKE WEBHOOK RESPONSE: 200 OK")
 
+	// Update memo to record timeout event
+	memo := map[string]interface{}{
+		"timeout_occurred": true,
+		"timeout_at":       workflow.Now(ctx).UTC(),
+		"event":            "timeout",
+		"workflow_id":      workflow.GetInfo(ctx).WorkflowExecution.ID,
+	}
+	err := workflow.UpsertMemo(ctx, memo)
+	if err != nil {
+		handlerCtx.Logger.Error("Failed to upsert memo", "error", err)
+	} else {
+		handlerCtx.Logger.Info("Successfully updated memo with timeout information")
+	}
+
 	// Continue to next handler if exists
 	if h.next != nil {
 		return h.next.Handle(ctx, handlerCtx, selector)
