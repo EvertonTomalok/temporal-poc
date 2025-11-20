@@ -27,7 +27,7 @@ func main() {
 		TaskQueue: core.PrimaryWorkflowTaskQueue,
 	}
 
-	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, workflows.AbandonedCartWorkflow)
+	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, workflows.Workflow)
 	if err != nil {
 		log.Fatalln("Unable to execute workflow", err)
 	}

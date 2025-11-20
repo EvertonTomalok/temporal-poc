@@ -107,7 +107,7 @@ func startWorkflowHandler(c echo.Context) error {
 		TaskQueue: core.PrimaryWorkflowTaskQueue,
 	}
 
-	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.AbandonedCartWorkflow)
+	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.Workflow)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to execute workflow: %v", err),

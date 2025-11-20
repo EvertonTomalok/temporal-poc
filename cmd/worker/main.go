@@ -55,7 +55,7 @@ func main() {
 	w := worker.New(c, core.PrimaryWorkflowTaskQueue, worker.Options{})
 
 	// Register workflow
-	w.RegisterWorkflow(workflows.AbandonedCartWorkflow)
+	w.RegisterWorkflow(workflows.Workflow)
 
 	// Register all named activities so they appear with node names in the Temporal UI
 	// Each activity is registered with its node name so it appears correctly in the UI

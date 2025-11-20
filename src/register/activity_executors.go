@@ -35,8 +35,11 @@ type StepDefinition struct {
 	Conditions *Conditions `json:"conditions"` // Conditional branching based on event types (optional)
 }
 
-// WorkflowDefinition defines the entire workflow structure as a map of step names to step definitions
-type WorkflowDefinition map[string]StepDefinition
+// WorkflowDefinition defines the entire workflow structure with steps and a starter step
+type WorkflowDefinition struct {
+	Steps     map[string]StepDefinition `json:"steps"`      // Map of step names to step definitions
+	StartStep string                    `json:"start_step"` // The starting step name
+}
 
 // ExecuteProcessNodeActivity executes the activity for a specific node
 // Uses the node name as the activity name so it appears correctly in the Temporal UI
@@ -83,16 +86,14 @@ type WorkflowNode = nodes.WorkflowNode
 
 // ActivityRegistry holds the workflow definition and execution state
 type ActivityRegistry struct {
-	Definition WorkflowDefinition // Workflow definition map
-	StartStep  string             // The starting step name
+	Definition WorkflowDefinition // Workflow definition with steps and start step
 }
 
-// NewActivityRegistryWithDefinition creates a new activity registry with a workflow definition map
-// The definition maps step names to step definitions, allowing for conditional branching
-func NewActivityRegistryWithDefinition(definition WorkflowDefinition, startStep string) *ActivityRegistry {
+// NewActivityRegistryWithDefinition creates a new activity registry with a workflow definition
+// The definition contains steps map and start step, allowing for conditional branching
+func NewActivityRegistryWithDefinition(definition WorkflowDefinition) *ActivityRegistry {
 	return &ActivityRegistry{
 		Definition: definition,
-		StartStep:  startStep,
 	}
 }
 
@@ -101,9 +102,9 @@ func NewActivityRegistryWithDefinition(definition WorkflowDefinition, startStep 
 // All node execution goes through ExecuteActivity - this is the only entry point
 func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting workflow node orchestration (map-based)", "start_step", r.StartStep)
+	logger.Info("Starting workflow node orchestration (map-based)", "start_step", r.Definition.StartStep)
 
-	currentStep := r.StartStep
+	currentStep := r.Definition.StartStep
 	visitedSteps := make(map[string]bool) // Track visited steps to prevent infinite loops
 
 	for {
@@ -115,7 +116,7 @@ func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, star
 		visitedSteps[currentStep] = true
 
 		// Get step definition
-		stepDef, exists := r.Definition[currentStep]
+		stepDef, exists := r.Definition.Steps[currentStep]
 		if !exists {
 			logger.Error("Step definition not found", "step", currentStep)
 			return fmt.Errorf("step definition not found: %s", currentStep)

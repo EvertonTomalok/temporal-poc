@@ -3,16 +3,27 @@ package validation
 import (
 	"fmt"
 
+	"temporal-poc/src/nodes"
 	"temporal-poc/src/register"
 )
 
 // ValidateWorkflowDefinition validates the workflow definition for circular dependencies
 // It checks all possible paths from the start step to detect cycles
 // This should be called before executing the workflow
-func ValidateWorkflowDefinition(definition register.WorkflowDefinition, startStep string) error {
+func ValidateWorkflowDefinition(definition register.WorkflowDefinition) error {
 	// Check if start step exists
-	if _, exists := definition[startStep]; !exists {
-		return fmt.Errorf("start step not found in definition: %s", startStep)
+	if _, exists := definition.Steps[definition.StartStep]; !exists {
+		return fmt.Errorf("start step not found in definition: %s", definition.StartStep)
+	}
+
+	// Validate all node names in the workflow definition
+	for stepName, stepDef := range definition.Steps {
+		if stepDef.Node == "" {
+			return fmt.Errorf("step %s has an empty node name", stepName)
+		}
+		if _, exists := nodes.GetProcessor(stepDef.Node); !exists {
+			return fmt.Errorf("invalid node name '%s' in step '%s': node is not registered", stepDef.Node, stepName)
+		}
 	}
 
 	// Use DFS to detect cycles
@@ -34,7 +45,7 @@ func ValidateWorkflowDefinition(definition register.WorkflowDefinition, startSte
 		}
 
 		// Get step definition
-		stepDef, exists := definition[step]
+		stepDef, exists := definition.Steps[step]
 		if !exists {
 			return fmt.Errorf("step definition not found: %s", step)
 		}
@@ -77,5 +88,5 @@ func ValidateWorkflowDefinition(definition register.WorkflowDefinition, startSte
 	}
 
 	// Start DFS from the start step
-	return dfs(startStep)
+	return dfs(definition.StartStep)
 }
