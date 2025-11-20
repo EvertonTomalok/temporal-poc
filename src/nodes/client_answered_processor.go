@@ -1,6 +1,8 @@
 package nodes
 
 import (
+	"strings"
+
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -25,7 +27,19 @@ func (h *ClientAnsweredProcessorHandler) Handle(ctx workflow.Context, handlerCtx
 		ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
 	)
 	if err != nil {
-		handlerCtx.Logger.Error("Failed to upsert search attributes", "error", err)
+		// Check if it's a BadSearchAttributes error (search attributes not registered)
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "BadSearchAttributes") || strings.Contains(errMsg, "is not defined") {
+			handlerCtx.Logger.Error(
+				"Failed to upsert search attributes: search attributes not registered on Temporal server",
+				"error", err,
+				"hint", "Search attributes should be auto-registered on worker startup. If this error persists, check worker logs or register manually using: temporal operator search-attributes add -name ClientAnswered -type Bool -name ClientAnsweredAt -type Datetime",
+			)
+		} else {
+			handlerCtx.Logger.Error("Failed to upsert search attributes", "error", err)
+		}
+		// Log the error but don't fail the workflow - continue processing
+		// The workflow can still complete successfully even if search attributes fail
 	} else {
 		handlerCtx.Logger.Info("Successfully upserted client-answered search attributes (searchable and persistent)")
 	}

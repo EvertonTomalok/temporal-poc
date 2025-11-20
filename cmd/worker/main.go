@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"temporal-poc/src/core"
+	"temporal-poc/src/nodes"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
@@ -26,6 +27,28 @@ func main() {
 		log.Fatalln("Unable to create client", err)
 	}
 	defer c.Close()
+
+	// Register search attributes if they don't exist
+	// This MUST succeed before workflows can run, otherwise workflows will fail with BadSearchAttributes
+	log.Println("Checking and registering search attributes...")
+	if err := nodes.RegisterSearchAttributesIfNeeded(c); err != nil {
+		log.Printf("ERROR: Failed to register search attributes automatically: %v", err)
+		log.Println("")
+		log.Println("Workflows will fail with BadSearchAttributes error if search attributes are not registered.")
+		log.Println("Please register them manually using one of these methods:")
+		log.Println("")
+		log.Println("  Method 1 (Temporal CLI):")
+		log.Println("    temporal operator search-attributes add -name ClientAnswered -type Bool")
+		log.Println("    temporal operator search-attributes add -name ClientAnsweredAt -type Datetime")
+		log.Println("")
+		log.Println("  Method 2 (Temporal Server startup):")
+		log.Println("    temporal server start-dev \\")
+		log.Println("      --search-attribute ClientAnswered=Bool \\")
+		log.Println("      --search-attribute ClientAnsweredAt=Datetime")
+		log.Println("")
+		log.Fatalln("Worker cannot start without registered search attributes. Exiting.")
+	}
+	log.Println("✓ Search attributes verified/registered successfully")
 
 	// Create worker
 	w := worker.New(c, core.PrimaryWorkflowTaskQueue, worker.Options{})
