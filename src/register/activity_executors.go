@@ -18,7 +18,7 @@ func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityC
 	// Set activity timeout - activities should have reasonable timeouts (max 10 minutes)
 	// Use a reasonable default if timeoutDuration is too large or invalid
 	activityTimeout := 5 * time.Minute // Default to 5 minutes for activities
-	if timeoutDuration > 0 && timeoutDuration < 10*time.Minute {
+	if timeoutDuration > 0 {
 		// Use the provided timeout if it's reasonable (less than 10 minutes)
 		activityTimeout = timeoutDuration
 	}

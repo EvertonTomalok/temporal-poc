@@ -8,7 +8,6 @@ import (
 	"temporal-poc/src/core"
 	workflows "temporal-poc/src/workflows"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
@@ -99,7 +98,7 @@ func startWorkflowHandler(c echo.Context) error {
 	// Generate workflow ID if not provided
 	workflowID := req.WorkflowID
 	if workflowID == "" {
-		workflowID = "abandonedCart-" + uuid.New().String()
+		workflowID = workflows.GenerateAbandonedCartWorkflowID()
 	}
 
 	// Start workflow

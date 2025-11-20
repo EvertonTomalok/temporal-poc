@@ -8,7 +8,6 @@ import (
 	workflows "temporal-poc/src/workflows"
 	"time"
 
-	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 )
 
@@ -24,7 +23,7 @@ func main() {
 
 	// Start workflow
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        "abandonedCart-" + uuid.New().String(),
+		ID:        workflows.GenerateAbandonedCartWorkflowID(),
 		TaskQueue: core.PrimaryWorkflowTaskQueue,
 	}
 

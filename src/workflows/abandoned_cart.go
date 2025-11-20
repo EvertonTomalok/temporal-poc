@@ -1,12 +1,20 @@
 package src
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-poc/src/register"
 )
+
+var AbandonedCartWorkflowName = "abandoned_cart"
+
+func GenerateAbandonedCartWorkflowID() string {
+	return fmt.Sprintf("%s-%s", AbandonedCartWorkflowName, uuid.New().String())
+}
 
 // AbandonedCartWorkflow is an agnostic workflow that delegates to nodes
 // All business logic is handled by nodes in the /nodes directory
