@@ -184,8 +184,10 @@ func executeActivityNode(ctx workflow.Context, nodeName string, workflowID strin
 	}
 
 	// Set activity options with timeout and retry policy before executing
+	// HeartbeatTimeout is required for heartbeats to be tracked and visible in UI
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: activityTimeout,
+		HeartbeatTimeout:    60 * time.Second,
 		RetryPolicy:         retryPolicy,
 	}
 	activityCtxWithOptions := workflow.WithActivityOptions(ctx, ao)

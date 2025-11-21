@@ -31,9 +31,10 @@ func TimeoutWebhookActivity(ctx context.Context, activityCtx ActivityContext) er
 	// In a real implementation, this would make an HTTP call to a webhook endpoint
 	logger.Info("WebhookWorkflowNode: Processing webhook event")
 
-	// Use time.Sleep in activities (not workflow.Sleep) since we're in an activity context
+	// Use SleepWithHeartbeat to keep the activity alive during long operations
 	// In a real scenario, this would be the time to make the HTTP call
-	time.Sleep(2 * time.Second)
+	// Heartbeat every 500ms to keep the activity responsive
+	SleepWithHeartbeat(ctx, 3*time.Second, 500*time.Millisecond)
 
 	logger.Info("WebhookWorkflowNode: Processing completed")
 	logger.Info("TimeoutWebhookActivity completed successfully")
