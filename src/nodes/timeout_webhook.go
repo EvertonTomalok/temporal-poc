@@ -9,9 +9,11 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+var WebhookName = "webhook"
+
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode("webhook", processTimeoutWebhookNode, WebhookWorkflowNode)
+	RegisterNode(WebhookName, processTimeoutWebhookNode, WebhookWorkflowNode)
 }
 
 // processTimeoutWebhookNode processes the timeout webhook node
@@ -42,11 +44,10 @@ func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time
 
 	logger.Info("WebhookWorkflowNode: Processing completed")
 	// Return result with activity information - executor will call ExecuteActivity
-	// Stop the flow after webhook processing
+	// Workflow definition (GoTo/Condition) controls flow continuation, not this node
 	return NodeExecutionResult{
-		ShouldContinue: false,
-		Error:          nil,
-		ActivityName:   "webhook",
-		EventType:      core.EventTypeTimeout,
+		Error:        nil,
+		ActivityName: WebhookName,
+		EventType:    core.EventTypeTimeout,
 	}
 }

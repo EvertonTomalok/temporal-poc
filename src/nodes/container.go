@@ -22,12 +22,11 @@ type ActivityContext struct {
 // ActivityProcessor is a function type that processes an activity
 type ActivityProcessor func(ctx context.Context, activityCtx ActivityContext) error
 
-// NodeExecutionResult indicates whether the workflow should continue to the next node or stop
-// It also contains information about the activity to execute
+// NodeExecutionResult contains information about the activity to execute
 // NodeExecutionResult is agnostic and only knows about general results
+// Note: ShouldContinue is deprecated - workflow definition (GoTo/Condition) controls flow
 type NodeExecutionResult struct {
-	ShouldContinue bool
-	Error          error
+	Error error
 	// Activity information - used by executor to call ExecuteActivity
 	ActivityName string
 	EventType    core.EventType

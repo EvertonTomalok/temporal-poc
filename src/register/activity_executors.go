@@ -140,20 +140,18 @@ func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, star
 		stepResultKey := fmt.Sprintf("activity_result_%s", currentStep)
 		memo := map[string]interface{}{
 			stepResultKey: map[string]interface{}{
-				"step":            currentStep,
-				"node":            stepDef.Node,
-				"activity_name":   result.ActivityName,
-				"event_type":      string(result.EventType),
-				"should_continue": result.ShouldContinue,
-				"completed_at":    workflow.Now(ctx).UTC(),
+				"step":          currentStep,
+				"node":          stepDef.Node,
+				"activity_name": result.ActivityName,
+				"event_type":    string(result.EventType),
+				"completed_at":  workflow.Now(ctx).UTC(),
 			},
 			"last_activity_result": map[string]interface{}{
-				"step":            currentStep,
-				"node":            stepDef.Node,
-				"activity_name":   result.ActivityName,
-				"event_type":      string(result.EventType),
-				"should_continue": result.ShouldContinue,
-				"completed_at":    workflow.Now(ctx).UTC(),
+				"step":          currentStep,
+				"node":          stepDef.Node,
+				"activity_name": result.ActivityName,
+				"event_type":    string(result.EventType),
+				"completed_at":  workflow.Now(ctx).UTC(),
 			},
 		}
 		if err := workflow.UpsertMemo(ctx, memo); err != nil {
@@ -162,13 +160,8 @@ func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, star
 			logger.Info("Result memo persisted", "step", currentStep, "node", stepDef.Node)
 		}
 
-		// If node indicates to stop, end the flow immediately
-		if !result.ShouldContinue {
-			logger.Info("Node requested to stop flow", "step", currentStep)
-			return nil
-		}
-
-		// Determine next step based on conditions or go_to
+		// Determine next step based on workflow definition (conditions or go_to)
+		// The workflow definition controls flow, not individual nodes
 		nextStep := ""
 
 		// Check conditions first (conditional branching)
@@ -208,8 +201,7 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 	if !exists {
 		logger.Error("Unknown workflow node name", "node_name", nodeName)
 		return NodeExecutionResult{
-			ShouldContinue: false,
-			Error:          nil,
+			Error: nil,
 		}, nil
 	}
 

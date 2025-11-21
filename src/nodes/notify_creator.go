@@ -10,9 +10,11 @@ import (
 	"temporal-poc/src/core"
 )
 
+var NotifyCreatorName = "notify_creator"
+
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode("notify_creator", processNotifyCreatorNode, NotifyCreatorWorkflowNode)
+	RegisterNode(NotifyCreatorName, processNotifyCreatorNode, NotifyCreatorWorkflowNode)
 }
 
 // processNotifyCreatorNode processes the notify creator node
@@ -44,30 +46,22 @@ func NotifyCreatorWorkflowNode(ctx workflow.Context, workflowID string, startTim
 	logger := workflow.GetLogger(ctx)
 	logger.Info("NotifyCreatorWorkflowNode: Orchestrating creator notification")
 
-	// Check if client answered by checking search attributes
-	// This node should only run when wait_answer received a signal (not timeout)
 	sas := workflow.GetTypedSearchAttributes(ctx)
 	clientAnswered, ok := sas.GetBool(core.ClientAnsweredField)
 
 	if !ok || !clientAnswered {
 		logger.Info("NotifyCreatorWorkflowNode: Client did not answer (timeout occurred), skipping notification")
-		// Continue to next node (webhook) - set EventType so activity can check
 		return NodeExecutionResult{
-			ShouldContinue: true,
-			Error:          nil,
-			ActivityName:   "notify_creator", // Activity will check ClientAnswered from search attributes and skip internally
-			EventType:      core.EventTypeTimeout,
+			Error:        nil,
+			ActivityName: "notify_creator",
+			EventType:    core.EventTypeTimeout,
 		}
 	}
 
 	logger.Info("NotifyCreatorWorkflowNode: Client answered, will notify creator")
-	// Return result with activity information - executor will call ExecuteActivity
-	// Set EventType so activity knows to process the notification
-	// After notify_creator, stop the flow (don't continue to webhook)
 	return NodeExecutionResult{
-		ShouldContinue: false,
-		Error:          nil,
-		ActivityName:   "notify_creator",
-		EventType:      core.EventTypeSatisfied,
+		Error:        nil,
+		ActivityName: NotifyCreatorName,
+		EventType:    core.EventTypeSatisfied,
 	}
 }

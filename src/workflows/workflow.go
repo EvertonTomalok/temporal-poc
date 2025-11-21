@@ -51,6 +51,14 @@ func Workflow(ctx workflow.Context) error {
 			},
 			"step_4": {
 				Node: "webhook",
+				GoTo: "step_5",
+			},
+			"step_5": {
+				Node: "explicity_wait",
+				GoTo: "step_6",
+			},
+			"step_6": {
+				Node: "send_message",
 			},
 		},
 	}

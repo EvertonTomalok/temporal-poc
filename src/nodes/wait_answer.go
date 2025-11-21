@@ -10,9 +10,11 @@ import (
 	"temporal-poc/src/core"
 )
 
+var WaitAnswerName = "wait_answer"
+
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode("wait_answer", processClientAnsweredProcessorNode, WaitAnswerWorkflowNode)
+	RegisterNode(WaitAnswerName, processClientAnsweredProcessorNode, WaitAnswerWorkflowNode)
 }
 
 // processClientAnsweredProcessorNode processes the client-answered processor node
@@ -70,10 +72,9 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 		if remaining <= 0 {
 			logger.Info("WaitAnswerWorkflowNode: Timeout reached before signal")
 			return NodeExecutionResult{
-				ShouldContinue: true,
-				Error:          nil,
-				ActivityName:   "wait_answer",
-				EventType:      core.EventTypeTimeout,
+				Error:        nil,
+				ActivityName: WaitAnswerName,
+				EventType:    core.EventTypeTimeout,
 			}
 		}
 
@@ -123,10 +124,9 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 			// Return result with activity information - executor will call ExecuteActivity
 			// Continue to next node (notify_creator) when signal is received
 			return NodeExecutionResult{
-				ShouldContinue: true,
-				Error:          nil,
-				ActivityName:   "wait_answer",
-				EventType:      core.EventTypeSatisfied,
+				Error:        nil,
+				ActivityName: WaitAnswerName,
+				EventType:    core.EventTypeSatisfied,
 			}
 		}
 
@@ -134,14 +134,13 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 		if timer != nil && timer.IsReady() {
 			logger.Info("WaitAnswerWorkflowNode: Timeout reached")
 			return NodeExecutionResult{
-				ShouldContinue: true,
-				Error:          nil,
-				ActivityName:   "wait_answer",
-				EventType:      core.EventTypeTimeout,
+				Error:        nil,
+				ActivityName: WaitAnswerName,
+				EventType:    core.EventTypeTimeout,
 			}
 		}
 	}
 
 	// This should never be reached, but required for compilation
-	return NodeExecutionResult{ShouldContinue: false, Error: nil}
+	return NodeExecutionResult{Error: nil}
 }

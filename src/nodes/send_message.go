@@ -10,9 +10,11 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+var SendMessageName = "send_message"
+
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode("send_message", processSendMessageNode, SendMessageWorkflowNode)
+	RegisterNode(SendMessageName, processSendMessageNode, SendMessageWorkflowNode)
 }
 
 // processSendMessageNode processes the send message node
@@ -59,9 +61,8 @@ func SendMessageWorkflowNode(ctx workflow.Context, workflowID string, startTime 
 	// Return result with activity information - executor will call ExecuteActivity
 	// Continue to next node (wait_answer) after activity completes
 	return NodeExecutionResult{
-		ShouldContinue: true,
-		Error:          nil,
-		ActivityName:   "send_message",
-		EventType:      core.EventTypeSatisfied,
+		Error:        nil,
+		ActivityName: SendMessageName,
+		EventType:    core.EventTypeSatisfied,
 	}
 }
