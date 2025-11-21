@@ -98,13 +98,13 @@ This system implements a **dynamic workflow orchestration engine** that separate
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Temporal Server                          │
-│  (Workflow Execution, History, Task Queue Management)      │
+│  (Workflow Execution, History, Task Queue Management)       │
 └─────────────────────────────────────────────────────────────┘
                             ▲
                             │
         ┌───────────────────┴───────────────────┐
         │                                       │
-┌───────▼────────┐                    ┌────────▼───────┐
+┌───────▼────────┐                    ┌─────────▼──────┐
 │   Worker       │                    │  HTTP Server   │
 │  (cmd/worker)  │                    │  (cmd/server)  │
 │                │                    │                │
@@ -125,7 +125,7 @@ This system implements a **dynamic workflow orchestration engine** that separate
                             │
         ┌───────────────────┴───────────────────┐
         │                                       │
-┌───────▼────────┐                    ┌────────▼───────┐
+┌───────▼────────┐                    ┌─────────▼──────┐
 │  Registry      │                    │  Node Container│
 │  (src/register)│                    │  (src/nodes)   │
 │                │                    │                │
@@ -179,11 +179,31 @@ Nodes are registered in a **Node Container** using an initialization function:
 
 ```go
 func init() {
-    RegisterNode(NodeName, nodeProcessorFunction)
+    // Register with retry policy
+    retryPolicy := &temporal.RetryPolicy{
+        InitialInterval:    time.Second,
+        BackoffCoefficient: 2.0,
+        MaximumInterval:    time.Minute,
+        MaximumAttempts:    15,
+    }
+    RegisterNode(NodeName, nodeProcessorFunction, retryPolicy)
+    
+    // Or register without retry policy (pass nil)
+    // RegisterNode(NodeName, nodeProcessorFunction, nil)
 }
 ```
 
-The container maintains a registry of all available nodes, allowing dynamic lookup and execution.
+The `RegisterNode` function signature is:
+```go
+func RegisterNode(name string, processor ActivityProcessor, retryPolicy *temporal.RetryPolicy)
+```
+
+**Parameters**:
+- `name`: The unique identifier for the node (used in workflow definitions)
+- `processor`: The `ActivityProcessor` function that implements the node's logic
+- `retryPolicy`: The retry policy for the node's activity execution. If `nil`, no retry policy is applied (empty retry policy with `MaximumAttempts: 1`)
+
+The container maintains a thread-safe registry of all available nodes, allowing dynamic lookup and execution. Registration is typically done in each node file's `init()` function, which is automatically called when the package is imported.
 
 #### 3. Event Types
 
@@ -355,18 +375,36 @@ Each node execution consists of two phases:
 
 #### Node Registration and Lookup
 
-Nodes are registered using the `init()` function in each node file:
+Nodes are registered using the `init()` function in each node file. The `RegisterNode` function is thread-safe and stores both the processor and retry policy:
+
+```go
+// RegisterNode registers a node name and processor in the container
+// This is called by each node's init() function
+// If retryPolicy is nil, no retry policy will be applied (empty retry policy)
+func RegisterNode(name string, processor ActivityProcessor, retryPolicy *temporal.RetryPolicy) {
+    container := GetContainer()
+    container.mu.Lock()
+    defer container.mu.Unlock()
+    container.nodes[name] = NodeInfo{
+        Name:        name,
+        Processor:   processor,
+        RetryPolicy: retryPolicy,
+    }
+}
+```
+
+**Example registrations**:
 
 ```go
 // In src/nodes/wait_answer.go
 func init() {
-    // No retry policy - pass nil
+    // No retry policy - pass nil for empty retry policy (no retries)
     RegisterNode(WaitAnswerName, waitAnswerProcessorNode, nil)
 }
 
 // In src/nodes/send_message.go
 func init() {
-    // With retry policy
+    // With retry policy - configure exponential backoff
     retryPolicy := &temporal.RetryPolicy{
         InitialInterval:    time.Second,
         BackoffCoefficient: 2.0,
@@ -388,7 +426,7 @@ type NodeInfo struct {
 
 type Container struct {
     nodes map[string]NodeInfo
-    mu    sync.RWMutex
+    mu    sync.RWMutex // Thread-safe access
 }
 ```
 
@@ -398,6 +436,12 @@ When a node needs to be executed, the registry looks it up:
 workflowNode, exists := nodes.GetWorkflowNode(nodeName)
 retryPolicy := nodes.GetRetryPolicy(nodeName) // Get retry policy for activity
 ```
+
+**Key points**:
+- Registration is thread-safe (uses `sync.RWMutex`)
+- Each node must be registered before it can be used in workflow definitions
+- The retry policy is optional - pass `nil` to disable retries
+- Registration typically happens in `init()` functions, which are called automatically when packages are imported
 
 ### Deep Dive: Activity Registry
 
@@ -566,7 +610,7 @@ Each node can be configured with a **retry policy** that determines how Temporal
 
 #### Configuring Retry Policy
 
-When registering a node, you can specify a retry policy:
+When registering a node using `RegisterNode`, you can specify a retry policy as the third parameter:
 
 ```go
 func init() {
@@ -583,7 +627,7 @@ func init() {
 
 #### No Retry Policy
 
-If a node doesn't need retries, pass `nil`:
+If a node doesn't need retries, pass `nil` as the `retryPolicy` parameter:
 
 ```go
 func init() {
@@ -592,7 +636,7 @@ func init() {
 }
 ```
 
-When `nil` is passed, the system automatically applies an empty retry policy with `MaximumAttempts: 1`, meaning no retries will occur.
+When `nil` is passed to `RegisterNode`, the system stores `nil` in the container. When the retry policy is retrieved via `GetRetryPolicy()`, if the stored policy is `nil`, it returns an empty retry policy with `MaximumAttempts: 1`, meaning no retries will occur (only the initial attempt).
 
 #### Retry Policy Parameters
 
@@ -723,6 +767,7 @@ func init() {
     RegisterNode(MyNewNodeName, myNewNodeProcessor, retryPolicy)
     
     // Option 2: Without retry policy (no retries)
+    // Pass nil as the retryPolicy parameter
     // RegisterNode(MyNewNodeName, myNewNodeProcessor, nil)
 }
 
@@ -737,6 +782,17 @@ func myNewNodeProcessor(ctx workflow.Context, activityCtx ActivityContext) NodeE
     }
 }
 ```
+
+**Important**: The `RegisterNode` function signature is:
+```go
+func RegisterNode(name string, processor ActivityProcessor, retryPolicy *temporal.RetryPolicy)
+```
+
+- `name`: The unique node identifier (string constant)
+- `processor`: Your node's processor function that implements `ActivityProcessor`
+- `retryPolicy`: Retry policy pointer, or `nil` to disable retries
+
+The registration is thread-safe and happens automatically when the package is imported (via `init()`).
 
 2. **Use in workflow definition**:
 
