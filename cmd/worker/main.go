@@ -55,7 +55,6 @@ func main() {
 	// Create worker
 	w := worker.New(c, domain.PrimaryWorkflowTaskQueue, worker.Options{})
 
-	// Register workflow
 	w.RegisterWorkflow(workflows.Workflow)
 
 	// Register all named activities so they appear with node names in the Temporal UI
@@ -65,6 +64,9 @@ func main() {
 	log.Printf("Registering %d named activities for UI display", len(nodeNames))
 	for _, nodeName := range nodeNames {
 		// Register the same activity function with different names for UI display
+		// Note: Retry policies for activities are set at execution time in ActivityOptions
+		// (see src/register/activity_executors.go). Each node's retry policy is retrieved
+		// from the container and applied when the activity is executed.
 		w.RegisterActivityWithOptions(register.ProcessNodeActivity, activity.RegisterOptions{
 			Name: nodeName,
 		})

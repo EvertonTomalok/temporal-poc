@@ -22,9 +22,10 @@ func GetInstance() *Register {
 }
 
 // ProcessNodeActivity is a generic activity function that processes any node
-// The actual processor (which expects workflow.Context) is called from the workflow node,
-// not from the activity. This activity is a placeholder for UI display purposes.
+// Note: The actual processor (workflow function) is called from the workflow node,
+// not from the activity. This activity is registered for UI display purposes.
 // Note: Activities use context.Context, not workflow.Context
+// Retry policy is applied via ActivityOptions in ExecuteProcessNodeActivity
 func ProcessNodeActivity(ctx context.Context, activityCtx ActivityContext) error {
 	// Note: The actual processor is called from the workflow node (in ExecuteActivity),
 	// not from here. This activity is registered for UI display purposes.

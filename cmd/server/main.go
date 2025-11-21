@@ -102,10 +102,11 @@ func startWorkflowHandler(c echo.Context) error {
 		workflowID = workflows.GenerateAbandonedCartWorkflowID()
 	}
 
-	// Start workflow
+	// Start workflow with retry policy
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: domain.PrimaryWorkflowTaskQueue,
+		ID:          workflowID,
+		TaskQueue:   domain.PrimaryWorkflowTaskQueue,
+		RetryPolicy: workflows.WorkflowRetryPolicy,
 	}
 
 	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.Workflow)

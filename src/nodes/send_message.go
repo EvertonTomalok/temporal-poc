@@ -17,7 +17,7 @@ func init() {
 		InitialInterval:    time.Second,
 		BackoffCoefficient: 2.0,
 		MaximumInterval:    time.Minute,
-		MaximumAttempts:    15,
+		MaximumAttempts:    25,
 	}
 	RegisterNode(SendMessageName, processSendMessageNode, retryPolicy)
 }
@@ -42,7 +42,7 @@ func processSendMessageNode(ctx workflow.Context, activityCtx ActivityContext) N
 	logger.Info("Sleeping before response", "duration", sleepDuration)
 	// Use workflow.Sleep instead of time.After for determinism - this yields to Temporal runtime
 	workflow.Sleep(ctx, sleepDuration)
-	// Sleep completed normally
+
 	logger.Info("MESSAGE RESPONSE: 200 OK")
 	logger.Info("Send message node processed successfully")
 	return NodeExecutionResult{

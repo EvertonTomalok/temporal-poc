@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-poc/src/core/domain"
@@ -16,6 +17,15 @@ var AbandonedCartWorkflowName = "abandoned_cart"
 
 func GenerateAbandonedCartWorkflowID() string {
 	return fmt.Sprintf("%s-%s", AbandonedCartWorkflowName, uuid.New().String())
+}
+
+// WorkflowRetryPolicy defines the retry policy for the AbandonedCartWorkflow
+// This policy should be used in client.StartWorkflowOptions when starting the workflow
+var WorkflowRetryPolicy = &temporal.RetryPolicy{
+	InitialInterval:    2 * time.Second,
+	BackoffCoefficient: 1.1,
+	MaximumInterval:    15 * time.Second,
+	MaximumAttempts:    20,
 }
 
 // Workflow is an agnostic workflow that delegates to nodes

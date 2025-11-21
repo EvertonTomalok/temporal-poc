@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 )
 
 func main() {
@@ -21,10 +22,16 @@ func main() {
 	}
 	defer c.Close()
 
-	// Start workflow
+	// Start workflow with retry policy
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        workflows.GenerateAbandonedCartWorkflowID(),
 		TaskQueue: domain.PrimaryWorkflowTaskQueue,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    time.Minute,
+			MaximumAttempts:    10,
+		},
 	}
 
 	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, workflows.Workflow)

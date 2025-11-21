@@ -137,7 +137,10 @@ func (c *Container) GetRetryPolicy(name string) *temporal.RetryPolicy {
 	nodeInfo, exists := c.nodes[name]
 	if !exists {
 		return &temporal.RetryPolicy{
-			MaximumAttempts: 1,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 1.1,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    15,
 		}
 	}
 	return nodeInfo.RetryPolicy
