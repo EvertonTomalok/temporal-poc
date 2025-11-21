@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"log"
-	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 	_ "temporal-poc/src/nodes" // Import nodes package to trigger init() functions that register nodes
 	workflows "temporal-poc/src/workflows"
 	"time"
@@ -24,7 +24,7 @@ func main() {
 	// Start workflow
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        workflows.GenerateAbandonedCartWorkflowID(),
-		TaskQueue: core.PrimaryWorkflowTaskQueue,
+		TaskQueue: domain.PrimaryWorkflowTaskQueue,
 	}
 
 	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, workflows.Workflow)

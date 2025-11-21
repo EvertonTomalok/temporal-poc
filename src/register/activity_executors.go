@@ -3,40 +3,19 @@ package register
 import (
 	"fmt"
 	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 	"temporal-poc/src/nodes"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
 )
 
-// Condition defines conditional branching with condition evaluation and multiple outcomes
-type Condition struct {
-	Condition    string `json:"condition"`     // The condition to evaluate
-	Description  string `json:"description"`   // Description of the condition
-	Satisfied    string `json:"satisfied"`     // Next step when condition is satisfied (e.g., "step-3")
-	NotSatisfied string `json:"not_satisfied"` // Next step when condition is not satisfied (e.g., "step-4")
-	Timeout      string `json:"timeout"`       // Next step when timeout event occurs (e.g., "step-5")
-}
-
-func (c *Condition) GetNextStep(eventType core.EventType) string {
-	switch eventType {
-	case core.EventTypeSatisfied:
-		return c.Satisfied
-	case core.EventTypeNotSatisfied:
-		return c.NotSatisfied
-	case core.EventTypeTimeout:
-		return c.Timeout
-	default:
-		return ""
-	}
-}
-
 // StepDefinition defines a single step in the workflow
 // It can have either a simple "go_to" for linear flow or "conditions" for conditional branching
 type StepDefinition struct {
-	Node      string     `json:"node"`      // The node name to execute
-	GoTo      string     `json:"go_to"`     // Next step for simple linear flow (optional)
-	Condition *Condition `json:"condition"` // Conditional branching based on event types (optional)
+	Node      string            `json:"node"`      // The node name to execute
+	GoTo      string            `json:"go_to"`     // Next step for simple linear flow (optional)
+	Condition *domain.Condition `json:"condition"` // Conditional branching based on event types (optional)
 }
 
 // WorkflowDefinition defines the entire workflow structure with steps and a starter step

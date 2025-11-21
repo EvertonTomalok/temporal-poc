@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 	"temporal-poc/src/register"
 	workflows "temporal-poc/src/workflows"
 
@@ -52,7 +53,7 @@ func main() {
 	log.Println("✓ Search attributes verified/registered successfully")
 
 	// Create worker
-	w := worker.New(c, core.PrimaryWorkflowTaskQueue, worker.Options{})
+	w := worker.New(c, domain.PrimaryWorkflowTaskQueue, worker.Options{})
 
 	// Register workflow
 	w.RegisterWorkflow(workflows.Workflow)

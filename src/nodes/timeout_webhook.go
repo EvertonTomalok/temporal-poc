@@ -1,7 +1,7 @@
 package nodes
 
 import (
-	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -31,6 +31,6 @@ func processTimeoutWebhookNode(ctx workflow.Context, activityCtx ActivityContext
 	return NodeExecutionResult{
 		Error:        nil,
 		ActivityName: WebhookName,
-		EventType:    core.EventTypeTimeout,
+		EventType:    domain.EventTypeConditionTimeout,
 	}
 }

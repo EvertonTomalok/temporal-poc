@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 )
 
 var WaitAnswerName = "wait_answer"
@@ -58,7 +59,7 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 			return NodeExecutionResult{
 				Error:        nil,
 				ActivityName: WaitAnswerName,
-				EventType:    core.EventTypeTimeout,
+				EventType:    domain.EventTypeConditionTimeout,
 			}
 		}
 
@@ -110,7 +111,7 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 			return NodeExecutionResult{
 				Error:        nil,
 				ActivityName: WaitAnswerName,
-				EventType:    core.EventTypeSatisfied,
+				EventType:    domain.EventTypeConditionSatisfied,
 			}
 		}
 
@@ -120,7 +121,7 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 			return NodeExecutionResult{
 				Error:        nil,
 				ActivityName: WaitAnswerName,
-				EventType:    core.EventTypeTimeout,
+				EventType:    domain.EventTypeConditionTimeout,
 			}
 		}
 	}

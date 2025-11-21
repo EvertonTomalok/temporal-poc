@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/workflow"
 
+	"temporal-poc/src/core/domain"
 	"temporal-poc/src/register"
 	"temporal-poc/src/validation"
 )
@@ -41,7 +42,7 @@ func Workflow(ctx workflow.Context) error {
 			},
 			"step_2": {
 				Node: "wait_answer",
-				Condition: &register.Condition{
+				Condition: &domain.Condition{
 					Satisfied: "step_3",
 					Timeout:   "step_4",
 				},

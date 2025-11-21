@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/labstack/echo/v4"
@@ -104,7 +105,7 @@ func startWorkflowHandler(c echo.Context) error {
 	// Start workflow
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        workflowID,
-		TaskQueue: core.PrimaryWorkflowTaskQueue,
+		TaskQueue: domain.PrimaryWorkflowTaskQueue,
 	}
 
 	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.Workflow)

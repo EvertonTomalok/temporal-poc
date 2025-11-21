@@ -1,7 +1,7 @@
 package nodes
 
 import (
-	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -40,6 +40,6 @@ func processSendMessageNode(ctx workflow.Context, activityCtx ActivityContext) N
 	return NodeExecutionResult{
 		Error:        nil,
 		ActivityName: SendMessageName,
-		EventType:    core.EventTypeSatisfied,
+		EventType:    domain.EventTypeConditionSatisfied,
 	}
 }

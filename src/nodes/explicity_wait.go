@@ -1,7 +1,7 @@
 package nodes
 
 import (
-	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -32,7 +32,7 @@ func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext)
 	return NodeExecutionResult{
 		Error:        nil,
 		ActivityName: ExplicitWaitName,
-		EventType:    core.EventTypeSatisfied,
+		EventType:    domain.EventTypeConditionSatisfied,
 	}
 
 }
@@ -53,6 +53,6 @@ func ExplicityWaitWorkflowNode(ctx workflow.Context, workflowID string, startTim
 	return NodeExecutionResult{
 		Error:        nil,
 		ActivityName: ExplicitWaitName,
-		EventType:    core.EventTypeSatisfied,
+		EventType:    domain.EventTypeConditionSatisfied,
 	}
 }

@@ -3,7 +3,7 @@ package nodes
 import (
 	"go.temporal.io/sdk/workflow"
 
-	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
 )
 
 var NotifyCreatorName = "notify_creator"
@@ -22,12 +22,12 @@ func processNotifyCreatorNode(ctx workflow.Context, activityCtx ActivityContext)
 	// Only process if client answered (signal received)
 	// If this node is called but client didn't answer, it means it was called after timeout
 	// In that case, we should skip the notification
-	if !activityCtx.ClientAnswered || activityCtx.EventType != core.EventTypeSatisfied {
+	if !activityCtx.ClientAnswered || activityCtx.EventType != domain.EventTypeConditionSatisfied {
 		logger.Info("Skipping notify creator - client did not answer (timeout occurred)")
 		return NodeExecutionResult{
 			Error:        nil,
 			ActivityName: NotifyCreatorName,
-			EventType:    core.EventTypeTimeout,
+			EventType:    domain.EventTypeConditionTimeout,
 		}
 	}
 
@@ -40,6 +40,6 @@ func processNotifyCreatorNode(ctx workflow.Context, activityCtx ActivityContext)
 	return NodeExecutionResult{
 		Error:        nil,
 		ActivityName: NotifyCreatorName,
-		EventType:    core.EventTypeSatisfied,
+		EventType:    domain.EventTypeConditionSatisfied,
 	}
 }
