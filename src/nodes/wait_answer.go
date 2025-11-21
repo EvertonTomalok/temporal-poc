@@ -32,101 +32,64 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 	// Create channel for client-answered signal
 	clientAnsweredChannel := workflow.GetSignalChannel(ctx, domain.ClientAnsweredSignal)
 
-	// Use the node's own start time (when this node starts executing)
-	// This ensures the timeout is calculated from when the node starts, not from workflow start
-	nodeStartTime := workflow.Now(ctx)
-
 	clientAnswered := false
-	var timer workflow.Future
-	var cancelTimer workflow.CancelFunc
 
-	// Wait for signal or timeout
-	for {
-		// Check if client already answered
-		if clientAnswered {
-			if cancelTimer != nil {
-				cancelTimer()
-			}
-			logger.Info("WaitAnswerWorkflowNode: Client answered, processing")
-			break
+	// Create timer outside the loop
+	timerCtx, cancelTimer := workflow.WithCancel(ctx)
+	timer := workflow.NewTimer(timerCtx, waitAnswerTimeout)
+
+	// Create selector outside the loop
+	selector := workflow.NewSelector(ctx)
+
+	// Wait for client-answered signal
+	selector.AddReceive(clientAnsweredChannel, func(c workflow.ReceiveChannel, more bool) {
+		c.Receive(ctx, nil) // Receive the signal
+		logger.Info("WaitAnswerWorkflowNode: client-answered signal received")
+		clientAnswered = true
+		cancelTimer()
+	})
+
+	// Add timer to selector
+	selector.AddFuture(timer, func(f workflow.Future) {
+		cancelTimer()
+		logger.Info("WaitAnswerWorkflowNode: Timeout timer fired")
+	})
+
+	// Wait for either signal or timeout
+	selector.Select(ctx)
+
+	// Check if signal was received
+	if clientAnswered {
+		cancelTimer()
+		logger.Info("WaitAnswerWorkflowNode: Client answered, processing")
+
+		// Update search attributes from workflow context
+		err := workflow.UpsertTypedSearchAttributes(
+			ctx,
+			core.ClientAnsweredField.ValueSet(true),
+			core.ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
+		)
+		if err != nil {
+			logger.Error("WaitAnswerWorkflowNode: Failed to upsert search attributes", "error", err)
+		} else {
+			logger.Info("WaitAnswerWorkflowNode: Successfully upserted client-answered search attributes")
 		}
 
-		// Calculate remaining time from when this node started
-		elapsed := workflow.Now(ctx).Sub(nodeStartTime)
-		remaining := waitAnswerTimeout - elapsed
-
-		if remaining <= 0 {
-			logger.Info("WaitAnswerWorkflowNode: Timeout reached before signal")
-			return NodeExecutionResult{
-				Error:        nil,
-				ActivityName: WaitAnswerName,
-				EventType:    domain.EventTypeConditionTimeout,
-			}
-		}
-
-		// Use selector to wait for signal or timeout
-		selector := workflow.NewSelector(ctx)
-
-		// Wait for client-answered signal
-		selector.AddReceive(clientAnsweredChannel, func(c workflow.ReceiveChannel, more bool) {
-			c.Receive(ctx, nil) // Receive the signal
-			logger.Info("WaitAnswerWorkflowNode: client-answered signal received")
-			clientAnswered = true
-			if cancelTimer != nil {
-				cancelTimer()
-			}
-		})
-
-		// Add timer if one doesn't already exist
-		if timer == nil {
-			timerCtx, cancel := workflow.WithCancel(ctx)
-			timer = workflow.NewTimer(timerCtx, remaining)
-			cancelTimer = cancel
-
-			selector.AddFuture(timer, func(f workflow.Future) {
-				cancel()
-				logger.Info("WaitAnswerWorkflowNode: Timeout timer fired")
-			})
-		}
-
-		// Wait for either signal or timeout
-		selector.Select(ctx)
-
-		// After Select() returns, check if we should stop
-		if clientAnswered {
-			// Update search attributes from workflow context
-			err := workflow.UpsertTypedSearchAttributes(
-				ctx,
-				core.ClientAnsweredField.ValueSet(true),
-				core.ClientAnsweredAtField.ValueSet(workflow.Now(ctx).UTC()),
-			)
-			if err != nil {
-				logger.Error("WaitAnswerWorkflowNode: Failed to upsert search attributes", "error", err)
-			} else {
-				logger.Info("WaitAnswerWorkflowNode: Successfully upserted client-answered search attributes")
-			}
-
-			logger.Info("WaitAnswerWorkflowNode: Processing completed")
-			// Return result with activity information - executor will call ExecuteActivity
-			// Continue to next node (notify_creator) when signal is received
-			return NodeExecutionResult{
-				Error:        nil,
-				ActivityName: WaitAnswerName,
-				EventType:    domain.EventTypeConditionSatisfied,
-			}
-		}
-
-		// Check if timer fired (timeout reached)
-		if timer != nil && timer.IsReady() {
-			logger.Info("WaitAnswerWorkflowNode: Timeout reached")
-			return NodeExecutionResult{
-				Error:        nil,
-				ActivityName: WaitAnswerName,
-				EventType:    domain.EventTypeConditionTimeout,
-			}
+		logger.Info("WaitAnswerWorkflowNode: Processing completed")
+		// Return result with activity information - executor will call ExecuteActivity
+		// Continue to next node (notify_creator) when signal is received
+		return NodeExecutionResult{
+			Error:        nil,
+			ActivityName: WaitAnswerName,
+			EventType:    domain.EventTypeConditionSatisfied,
 		}
 	}
 
-	// This should never be reached, but required for compilation
-	return NodeExecutionResult{Error: nil}
+	// Timer fired (timeout reached)
+	logger.Info("WaitAnswerWorkflowNode: Timeout reached")
+	return NodeExecutionResult{
+		Error:        nil,
+		ActivityName: WaitAnswerName,
+		EventType:    domain.EventTypeConditionTimeout,
+	}
 }
