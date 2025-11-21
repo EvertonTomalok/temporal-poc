@@ -18,9 +18,9 @@ import (
 // DEPRECATED: Use workflows.StepConfig instead.
 // It can have either a simple "go_to" for linear flow or "conditions" for conditional branching
 type StepDefinition struct {
-	Node      string            `json:"node"`      // The node name to execute
-	GoTo      string            `json:"go_to"`     // Next step for simple linear flow (optional)
-	Condition *domain.Condition `json:"condition"` // Conditional branching based on event types (optional)
+	Node      string            `json:"node"`                // The node name to execute
+	GoTo      string            `json:"go_to,omitempty"`     // Next step for simple linear flow (optional)
+	Condition *domain.Condition `json:"condition,omitempty"` // Conditional branching based on event types (optional)
 }
 
 // WorkflowDefinition defines the entire workflow structure with steps and a starter step
@@ -114,7 +114,7 @@ func (r *Register) refreshNodes() {
 				Name:        name,
 				Type:        nodes.NodeTypeActivity,
 				Caller:      activityFn,
-				RetryPolicy: nil, // Activities don't have retry policies in the activities container
+				RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
 			}
 		}
 	}
@@ -164,7 +164,7 @@ func (r *Register) GetNodeInfo(name string) (NodeInfo, bool) {
 			Name:        name,
 			Type:        nodes.NodeTypeActivity,
 			Caller:      activityFn,
-			RetryPolicy: nil, // Activities don't have retry policies in the activities container
+			RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
 		}, true
 	}
 

@@ -5,12 +5,20 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 )
 
 const TimeoutWebhookActivityName = "webhook"
 
 func init() {
-	RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity)
+	// Register with retry policy for automatic retries on failure
+	retryPolicy := &temporal.RetryPolicy{
+		InitialInterval:    time.Second,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    time.Minute,
+		MaximumAttempts:    15,
+	}
+	RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity, retryPolicy)
 }
 
 // TimeoutWebhookActivity sends a webhook notification on timeout

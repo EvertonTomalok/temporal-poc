@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -22,26 +23,24 @@ func GenerateAbandonedCartWorkflowID() string {
 	return fmt.Sprintf("%s-%s", AbandonedCartWorkflowName, uuid.New().String())
 }
 
-// WorkflowRetryPolicy defines the retry policy for the AbandonedCartWorkflow
-// This policy should be used in client.StartWorkflowOptions when starting the workflow
-var WorkflowRetryPolicy = &temporal.RetryPolicy{
-	InitialInterval:    2 * time.Second,
-	BackoffCoefficient: 1.1,
-	MaximumInterval:    15 * time.Second,
-	MaximumAttempts:    20,
-}
-
 // StepConfig defines a single step in the dynamic workflow
 type StepConfig struct {
-	Node      string            `json:"node"`      // The node name to execute
-	GoTo      string            `json:"go_to"`     // Next step for simple linear flow (optional)
-	Condition *domain.Condition `json:"condition"` // Conditional branching based on event types (optional)
+	Node      string            `json:"node"`                // The node name to execute
+	GoTo      string            `json:"go_to,omitempty"`     // Next step for simple linear flow (optional)
+	Condition *domain.Condition `json:"condition,omitempty"` // Conditional branching based on event types (optional)
 }
 
 // WorkflowConfig defines the configuration for the dynamic workflow
 type WorkflowConfig struct {
 	StartStep string                `json:"start_step"` // The starting step name
 	Steps     map[string]StepConfig `json:"steps"`      // Map of step names to step definitions
+}
+
+// WorkflowExecutionConfig contains workflow options and configuration
+type WorkflowExecutionConfig struct {
+	Options      client.StartWorkflowOptions
+	Config       WorkflowConfig
+	WorkflowName string
 }
 
 // isWorkflowTask determines if a node is a workflow task (waiter) or an activity task
@@ -164,8 +163,27 @@ func executeActivityNode(ctx workflow.Context, nodeName string, workflowID strin
 		activityTimeout = timeoutDuration
 	}
 
+	// Get retry policy directly from activities container to ensure we use the activity's own retry policy
+	// This guarantees that each activity uses its registered retry policy
+	retryPolicy := activities.GetRetryPolicy(nodeName)
+	if retryPolicy == nil {
+		// If no retry policy is registered, use a default one
+		logger.Warn("No retry policy registered for activity, using default", "node_name", nodeName)
+		retryPolicy = &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 1.1,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    15,
+		}
+	} else {
+		logger.Info("Using registered retry policy for activity", "node_name", nodeName,
+			"initial_interval", retryPolicy.InitialInterval,
+			"backoff_coefficient", retryPolicy.BackoffCoefficient,
+			"maximum_interval", retryPolicy.MaximumInterval,
+			"maximum_attempts", retryPolicy.MaximumAttempts)
+	}
+
 	// Set activity options with timeout and retry policy before executing
-	retryPolicy := reg.GetRetryPolicy(nodeName)
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: activityTimeout,
 		RetryPolicy:         retryPolicy,

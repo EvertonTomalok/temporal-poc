@@ -22,6 +22,7 @@ func init() {
 	var err error
 	temporalClient, err = client.Dial(client.Options{
 		HostPort: client.DefaultHostPort,
+		Logger:   core.NewLoggerWithoutWarnings(),
 	})
 	if err != nil {
 		log.Fatalln("Unable to create Temporal client", err)
@@ -102,17 +103,15 @@ func startWorkflowHandler(c echo.Context) error {
 		workflowID = workflows.GenerateAbandonedCartWorkflowID()
 	}
 
-	// Build workflow config dynamically
-	config := workflows.BuildDefaultWorkflowDefinition()
-
+	// Build default workflow execution config
+	execConfig := workflows.BuildDefaultWorkflowExecutionConfig(workflowID)
 	// Start workflow with retry policy and dynamic workflow
-	workflowOptions := client.StartWorkflowOptions{
-		ID:          workflowID,
-		TaskQueue:   domain.PrimaryWorkflowTaskQueue,
-		RetryPolicy: workflows.WorkflowRetryPolicy,
-	}
-
-	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, "DynamicWorkflow", config)
+	we, err := temporalClient.ExecuteWorkflow(
+		context.Background(),
+		execConfig.Options,
+		execConfig.WorkflowName,
+		execConfig.Config,
+	)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to execute workflow: %v", err),
@@ -134,6 +133,7 @@ type SendSignalRequest struct {
 	WorkflowID string `json:"workflow_id,omitempty"`
 	RunID      string `json:"run_id,omitempty"`      // Optional: if empty, signals latest run
 	SignalName string `json:"signal_name,omitempty"` // Optional: defaults to "client-answered"
+	Message    string `json:"message,omitempty"`     // Optional: message to send with the signal
 }
 
 // SendSignalResponse represents the response from sending a signal
@@ -182,9 +182,14 @@ func sendSignalHandler(c echo.Context) error {
 		signalName = domain.ClientAnsweredSignal
 	}
 
+	// Prepare signal payload
+	signalPayload := domain.ClientAnsweredSignalPayload{
+		Message: req.Message,
+	}
+
 	// Send signal to workflow
 	// Use empty RunID to signal the latest run if not provided
-	err := temporalClient.SignalWorkflow(context.Background(), workflowID, runID, signalName, "some message here")
+	err := temporalClient.SignalWorkflow(context.Background(), workflowID, runID, signalName, signalPayload)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to signal workflow: %v", err),

@@ -43,9 +43,10 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 	selector := workflow.NewSelector(ctx)
 
 	// Wait for client-answered signal
+	var signalPayload domain.ClientAnsweredSignalPayload
 	selector.AddReceive(clientAnsweredChannel, func(c workflow.ReceiveChannel, more bool) {
-		c.Receive(ctx, nil) // Receive the signal
-		logger.Info("WaitAnswerWorkflowNode: client-answered signal received")
+		c.Receive(ctx, &signalPayload) // Receive the signal with payload
+		logger.Info("WaitAnswerWorkflowNode: client-answered signal received", "message", signalPayload.Message)
 		clientAnswered = true
 		cancelTimer()
 	})

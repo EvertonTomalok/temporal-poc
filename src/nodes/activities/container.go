@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-poc/src/core/domain"
@@ -40,8 +41,9 @@ type ActivityFunction func(ctx context.Context, activityCtx ActivityContext) err
 
 // ActivityInfo holds information about a registered activity
 type ActivityInfo struct {
-	Name     string
-	Function ActivityFunction
+	Name        string
+	Function    ActivityFunction
+	RetryPolicy *temporal.RetryPolicy // Retry policy for the activity (nil means no retry)
 }
 
 // Container holds all registered activities
@@ -65,15 +67,17 @@ func GetContainer() *Container {
 	return containerInstance
 }
 
-// RegisterActivity registers an activity function with a name
+// RegisterActivity registers an activity function with a name and optional retry policy
 // This is called by each activity's init() function
-func RegisterActivity(name string, fn ActivityFunction) {
+// If retryPolicy is nil, no retry policy will be applied (empty retry policy)
+func RegisterActivity(name string, fn ActivityFunction, retryPolicy *temporal.RetryPolicy) {
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	container.activities[name] = ActivityInfo{
-		Name:     name,
-		Function: fn,
+		Name:        name,
+		Function:    fn,
+		RetryPolicy: retryPolicy,
 	}
 }
 
@@ -108,6 +112,23 @@ func (c *Container) HasActivity(name string) bool {
 	return exists
 }
 
+// GetRetryPolicy returns the retry policy for a given activity name
+// If no retry policy is configured, return a default retry policy
+func (c *Container) GetRetryPolicy(name string) *temporal.RetryPolicy {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	activityInfo, exists := c.activities[name]
+	if !exists {
+		return &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 1.1,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    15,
+		}
+	}
+	return activityInfo.RetryPolicy
+}
+
 // Convenience functions that use the singleton instance
 
 // GetActivity is a convenience function that returns the activity function for a name
@@ -123,4 +144,9 @@ func GetAllActivityNames() []string {
 // HasActivity is a convenience function that returns true if an activity is registered
 func HasActivity(name string) bool {
 	return GetContainer().HasActivity(name)
+}
+
+// GetRetryPolicy is a convenience function that returns the retry policy for an activity name
+func GetRetryPolicy(name string) *temporal.RetryPolicy {
+	return GetContainer().GetRetryPolicy(name)
 }
