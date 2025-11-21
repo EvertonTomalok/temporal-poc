@@ -12,7 +12,8 @@ var ExplicitWaitName = "explicity_wait"
 func init() {
 	// Register node with container (processor and workflow node)
 	// No retry policy - pass nil for empty retry policy
-	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil)
+	// This is a workflow task because it uses workflow.Sleep for explicit waiting
+	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil, NodeTypeWorkflowTask)
 }
 
 // processExplicityWaitNode processes the explicity_wait node
@@ -36,24 +37,4 @@ func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext)
 		EventType:    domain.EventTypeConditionSatisfied,
 	}
 
-}
-
-// ExplicityWaitWorkflowNode is the workflow node that handles explicitly waiting for a period of time
-// It orchestrates the wait by executing the activity, then continues to the next node
-func ExplicityWaitWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("ExplicityWaitWorkflowNode: Orchestrating explicit wait")
-
-	// The actual work (sleeping) is done in the activity
-	// This workflow node just orchestrates and returns the result
-	// The activity will be executed by ExecuteActivity after this returns
-
-	logger.Info("ExplicityWaitWorkflowNode: Ready to execute activity, continuing to next node")
-	// Return result with activity information - executor will call ExecuteActivity
-	// Continue to next node after activity completes
-	return NodeExecutionResult{
-		Error:        nil,
-		ActivityName: ExplicitWaitName,
-		EventType:    domain.EventTypeConditionSatisfied,
-	}
 }

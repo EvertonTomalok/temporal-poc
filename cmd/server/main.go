@@ -102,14 +102,17 @@ func startWorkflowHandler(c echo.Context) error {
 		workflowID = workflows.GenerateAbandonedCartWorkflowID()
 	}
 
-	// Start workflow with retry policy
+	// Build workflow config dynamically
+	config := workflows.BuildDefaultWorkflowDefinition()
+
+	// Start workflow with retry policy and dynamic workflow
 	workflowOptions := client.StartWorkflowOptions{
 		ID:          workflowID,
 		TaskQueue:   domain.PrimaryWorkflowTaskQueue,
 		RetryPolicy: workflows.WorkflowRetryPolicy,
 	}
 
-	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.Workflow)
+	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, "DynamicWorkflow", config)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to execute workflow: %v", err),

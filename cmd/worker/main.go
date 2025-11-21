@@ -1,18 +1,55 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
+	"temporal-poc/src/nodes/activities"
 	"temporal-poc/src/register"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 )
+
+// DynamicActivity handles all activity executions dynamically by reading from the register
+// It routes to the appropriate activity function based on the activity name
+// Uses converter.EncodedValues to accept dynamic arguments from the workflow
+func DynamicActivity(ctx context.Context, args converter.EncodedValues) error {
+	info := activity.GetInfo(ctx)
+	activityName := info.ActivityType.Name
+
+	logger := activity.GetLogger(ctx)
+	logger.Info("DynamicActivity executing", "ActivityName", activityName)
+
+	// Decode ActivityContext from the encoded values
+	var activityCtx activities.ActivityContext
+	if err := args.Get(&activityCtx); err != nil {
+		logger.Error("Failed to decode ActivityContext", "error", err)
+		return fmt.Errorf("failed to decode ActivityContext: %w", err)
+	}
+
+	// Get the activity function from the register
+	reg := register.GetInstance()
+	activityFn, exists := reg.GetActivityFunction(activityName)
+	if !exists {
+		// If it's not an activity, it might be a workflow task - use placeholder
+		logger.Info("Activity not found in register, using placeholder", "ActivityName", activityName)
+		// This is a placeholder for UI display only.
+		// The actual processor is called from the workflow node in workflows/workflow.go.
+		return nil
+	}
+
+	// Execute the activity function
+	logger.Info("Executing activity from register", "ActivityName", activityName)
+	return activityFn(ctx, activityCtx)
+}
 
 func main() {
 	// Create a logger that ignores all warnings but keeps info and error messages
@@ -55,26 +92,19 @@ func main() {
 	// Create worker
 	w := worker.New(c, domain.PrimaryWorkflowTaskQueue, worker.Options{})
 
-	w.RegisterWorkflow(workflows.Workflow)
+	w.RegisterDynamicWorkflow(workflows.DynamicWorkflow, workflow.DynamicRegisterOptions{})
 
-	// Register all named activities so they appear with node names in the Temporal UI
-	// Each activity is registered with its node name so it appears correctly in the UI
-	// We use the same ProcessNodeActivity function for all nodes, but register it with different names
-	nodeNames := register.GetAllRegisteredNodeNames()
-	log.Printf("Registering %d named activities for UI display", len(nodeNames))
+	// Register dynamic activity as fallback for any unregistered activities
+	w.RegisterDynamicActivity(DynamicActivity, activity.DynamicRegisterOptions{})
+
+	// Register all nodes from register so they appear in the Temporal UI
+	// Activities are registered with their actual functions from the register
+	// Workflow tasks are registered with a placeholder (actual work is in workflow)
+	nodeNames := register.GetAllNodeNames()
+	log.Printf("Registering %d nodes from register", len(nodeNames))
 	for _, nodeName := range nodeNames {
-		// Register the same activity function with different names for UI display
-		// Note: Retry policies for activities are set at execution time in ActivityOptions
-		// (see src/register/activity_executors.go). Each node's retry policy is retrieved
-		// from the container and applied when the activity is executed.
-		w.RegisterActivityWithOptions(register.ProcessNodeActivity, activity.RegisterOptions{
-			Name: nodeName,
-		})
-		log.Printf("  Registered activity: %s", nodeName)
+		log.Printf("Registering node: %s", nodeName)
 	}
-
-	// Note: ProcessNodeActivity is no longer registered to force use of named activities
-	// This ensures the correct node name appears in the Temporal UI
 
 	// Start worker
 	log.Println("Worker started, listening on task queue: primary-workflow-task-queue")

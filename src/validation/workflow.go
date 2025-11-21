@@ -3,7 +3,6 @@ package validation
 import (
 	"fmt"
 
-	"temporal-poc/src/nodes"
 	"temporal-poc/src/register"
 )
 
@@ -17,11 +16,13 @@ func ValidateWorkflowDefinition(definition register.WorkflowDefinition) error {
 	}
 
 	// Validate all node names in the workflow definition
+	// Use register to check both workflow tasks and activities
+	reg := register.GetInstance()
 	for stepName, stepDef := range definition.Steps {
 		if stepDef.Node == "" {
 			return fmt.Errorf("step %s has an empty node name", stepName)
 		}
-		if _, exists := nodes.GetProcessor(stepDef.Node); !exists {
+		if _, exists := reg.GetNodeInfo(stepDef.Node); !exists {
 			return fmt.Errorf("invalid node name '%s' in step '%s': node is not registered", stepDef.Node, stepName)
 		}
 	}
