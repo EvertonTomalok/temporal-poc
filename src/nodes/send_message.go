@@ -4,6 +4,7 @@ import (
 	"temporal-poc/src/core/domain"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -11,7 +12,14 @@ var SendMessageName = "send_message"
 
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode(SendMessageName, processSendMessageNode)
+	// Configure retry policy with exponential backoff for send_message node
+	retryPolicy := &temporal.RetryPolicy{
+		InitialInterval:    time.Second,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    time.Minute,
+		MaximumAttempts:    15,
+	}
+	RegisterNode(SendMessageName, processSendMessageNode, retryPolicy)
 }
 
 // processSendMessageNode processes the send message node

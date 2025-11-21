@@ -5,6 +5,7 @@ import (
 	"temporal-poc/src/core/domain"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -38,8 +39,9 @@ type ActivityRegistry struct {
 
 // NodeInfo holds information about a registered node
 type NodeInfo struct {
-	Name      string
-	Processor ActivityProcessor
+	Name        string
+	Processor   ActivityProcessor
+	RetryPolicy *temporal.RetryPolicy // Retry policy for the node's activity (nil means no retry)
 }
 
 // Container holds all registered nodes with their processors and workflow nodes
@@ -65,13 +67,15 @@ func GetContainer() *Container {
 
 // RegisterNode registers a node name and processor in the container
 // This is called by each node's init() function
-func RegisterNode(name string, processor ActivityProcessor) {
+// If retryPolicy is nil, no retry policy will be applied (empty retry policy)
+func RegisterNode(name string, processor ActivityProcessor, retryPolicy *temporal.RetryPolicy) {
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	container.nodes[name] = NodeInfo{
-		Name:      name,
-		Processor: processor,
+		Name:        name,
+		Processor:   processor,
+		RetryPolicy: retryPolicy,
 	}
 }
 
@@ -123,4 +127,23 @@ func (c *Container) GetWorkflowNode(name string) (ActivityProcessor, bool) {
 // GetWorkflowNode is a convenience function that returns the workflow node for a node name
 func GetWorkflowNode(name string) (ActivityProcessor, bool) {
 	return GetContainer().GetWorkflowNode(name)
+}
+
+// GetRetryPolicy returns the retry policy for a given node name
+// If no retry policy is configured, return a simple retry policy with maximum attempts set to 1
+func (c *Container) GetRetryPolicy(name string) *temporal.RetryPolicy {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	nodeInfo, exists := c.nodes[name]
+	if !exists {
+		return &temporal.RetryPolicy{
+			MaximumAttempts: 1,
+		}
+	}
+	return nodeInfo.RetryPolicy
+}
+
+// GetRetryPolicy is a convenience function that returns the retry policy for a node name
+func GetRetryPolicy(name string) *temporal.RetryPolicy {
+	return GetContainer().GetRetryPolicy(name)
 }

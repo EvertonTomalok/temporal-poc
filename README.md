@@ -339,6 +339,8 @@ Each node execution consists of two phases:
                      ▼
 ┌─────────────────────────────────────────────────────────┐
 │  ExecuteProcessNodeActivity                             │
+│  - Retrieves retry policy from container                │
+│  - Applies retry policy to activity options             │
 │  - Executes activity with node name                     │
 │  - Activity appears in Temporal UI                      │
 └─────────────────────────────────────────────────────────┘
@@ -358,13 +360,32 @@ Nodes are registered using the `init()` function in each node file:
 ```go
 // In src/nodes/wait_answer.go
 func init() {
-    RegisterNode(WaitAnswerName, waitAnswerProcessorNode)
+    // No retry policy - pass nil
+    RegisterNode(WaitAnswerName, waitAnswerProcessorNode, nil)
+}
+
+// In src/nodes/send_message.go
+func init() {
+    // With retry policy
+    retryPolicy := &temporal.RetryPolicy{
+        InitialInterval:    time.Second,
+        BackoffCoefficient: 2.0,
+        MaximumInterval:    time.Minute,
+        MaximumAttempts:   15,
+    }
+    RegisterNode(SendMessageName, processSendMessageNode, retryPolicy)
 }
 ```
 
-The `Container` maintains a thread-safe registry:
+The `Container` maintains a thread-safe registry that stores both the processor and retry policy:
 
 ```go
+type NodeInfo struct {
+    Name        string
+    Processor   ActivityProcessor
+    RetryPolicy *temporal.RetryPolicy // nil means no retry policy
+}
+
 type Container struct {
     nodes map[string]NodeInfo
     mu    sync.RWMutex
@@ -375,6 +396,7 @@ When a node needs to be executed, the registry looks it up:
 
 ```go
 workflowNode, exists := nodes.GetWorkflowNode(nodeName)
+retryPolicy := nodes.GetRetryPolicy(nodeName) // Get retry policy for activity
 ```
 
 ### Deep Dive: Activity Registry
@@ -447,6 +469,7 @@ func processSendMessageNode(ctx workflow.Context, activityCtx ActivityContext) N
 - No timeout logic
 - Always returns `condition_satisfied`
 - Uses `workflow.Sleep` for deterministic delays
+- Configured with retry policy (15 attempts with exponential backoff)
 
 #### 2. Wait Answer Node
 
@@ -532,6 +555,61 @@ func ValidateWorkflowDefinition(definition WorkflowDefinition) error {
 }
 ```
 
+### Retry Policy Configuration
+
+Each node can be configured with a **retry policy** that determines how Temporal handles activity failures. Retry policies are:
+
+- **Stored in the container**: Each node's retry policy is registered with the node
+- **Applied automatically**: The retry policy is applied when the node's activity executes
+- **Deterministic**: Temporal's retry mechanism is deterministic and safe for workflow replays
+- **Configurable per node**: Each node can have its own retry policy or no retry policy
+
+#### Configuring Retry Policy
+
+When registering a node, you can specify a retry policy:
+
+```go
+func init() {
+    // Configure retry policy with exponential backoff
+    retryPolicy := &temporal.RetryPolicy{
+        InitialInterval:    time.Second,      // Initial retry delay
+        BackoffCoefficient: 2.0,              // Exponential backoff multiplier
+        MaximumInterval:    time.Minute,       // Maximum retry delay
+        MaximumAttempts:   15,                // Maximum number of retry attempts
+    }
+    RegisterNode(NodeName, nodeProcessor, retryPolicy)
+}
+```
+
+#### No Retry Policy
+
+If a node doesn't need retries, pass `nil`:
+
+```go
+func init() {
+    // No retry policy - pass nil for empty retry policy (no retries)
+    RegisterNode(NodeName, nodeProcessor, nil)
+}
+```
+
+When `nil` is passed, the system automatically applies an empty retry policy with `MaximumAttempts: 1`, meaning no retries will occur.
+
+#### Retry Policy Parameters
+
+- **InitialInterval**: The initial delay before the first retry attempt
+- **BackoffCoefficient**: Multiplier for exponential backoff (e.g., 2.0 means delays double each retry)
+- **MaximumInterval**: The maximum delay between retries (caps the exponential backoff)
+- **MaximumAttempts**: Total number of attempts (initial attempt + retries)
+
+**Example**: With `InitialInterval: 1s`, `BackoffCoefficient: 2.0`, `MaximumInterval: 1m`, retry delays would be:
+- Attempt 1: Immediate (initial attempt)
+- Attempt 2: 1 second delay
+- Attempt 3: 2 seconds delay
+- Attempt 4: 4 seconds delay
+- Attempt 5: 8 seconds delay
+- Attempt 6: 16 seconds delay
+- Attempt 7+: 1 minute delay (capped by MaximumInterval)
+
 ### State Safety and Determinism
 
 Temporal workflows must be **deterministic** - given the same event history, they produce the same result. This system ensures determinism by:
@@ -540,6 +618,7 @@ Temporal workflows must be **deterministic** - given the same event history, the
 2. **Deterministic Sleep**: Uses `workflow.Sleep()` instead of `time.After()`
 3. **No Randomness**: Avoids non-deterministic operations in workflow code
 4. **Event Sourcing**: State is reconstructed from event history during replay
+5. **Temporal Retry Policies**: Retry logic is handled by Temporal's deterministic retry mechanism, not manual retry loops
 
 #### Worker Restart Scenario
 
@@ -624,10 +703,27 @@ While not explicitly implemented as a chain, the workflow definition acts as a c
 ```go
 package nodes
 
+import (
+    "time"
+    "go.temporal.io/sdk/temporal"
+    "go.temporal.io/sdk/workflow"
+    "temporal-poc/src/core/domain"
+)
+
 var MyNewNodeName = "my_new_node"
 
 func init() {
-    RegisterNode(MyNewNodeName, myNewNodeProcessor)
+    // Option 1: With retry policy
+    retryPolicy := &temporal.RetryPolicy{
+        InitialInterval:    time.Second,
+        BackoffCoefficient: 2.0,
+        MaximumInterval:    time.Minute,
+        MaximumAttempts:   5,
+    }
+    RegisterNode(MyNewNodeName, myNewNodeProcessor, retryPolicy)
+    
+    // Option 2: Without retry policy (no retries)
+    // RegisterNode(MyNewNodeName, myNewNodeProcessor, nil)
 }
 
 func myNewNodeProcessor(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
@@ -740,7 +836,7 @@ temporal operator search-attributes add -name ClientAnsweredAt -type Datetime
 - [ ] Dynamic workflow definition loading (JSON/YAML)
 - [ ] Visual workflow builder (drag-and-drop UI)
 - [ ] Workflow versioning and migration
-- [ ] Enhanced error handling and retry logic
+- [x] Enhanced error handling and retry logic (per-node retry policy configuration)
 - [ ] Workflow templates and parameterization
 - [ ] Metrics and observability integration
 - [ ] Multi-tenant support

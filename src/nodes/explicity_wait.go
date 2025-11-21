@@ -11,7 +11,8 @@ var ExplicitWaitName = "explicity_wait"
 
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode(ExplicitWaitName, processExplicityWaitNode)
+	// No retry policy - pass nil for empty retry policy
+	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil)
 }
 
 // processExplicityWaitNode processes the explicity_wait node

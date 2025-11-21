@@ -10,7 +10,9 @@ import (
 var WebhookName = "webhook"
 
 func init() {
-	RegisterNode(WebhookName, processTimeoutWebhookNode)
+	// Register node with container (processor and workflow node)
+	// No retry policy - pass nil for empty retry policy
+	RegisterNode(WebhookName, processTimeoutWebhookNode, nil)
 }
 
 // processTimeoutWebhookNode processes the timeout webhook node

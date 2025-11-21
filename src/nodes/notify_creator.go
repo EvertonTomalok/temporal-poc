@@ -10,7 +10,8 @@ var NotifyCreatorName = "notify_creator"
 
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode(NotifyCreatorName, processNotifyCreatorNode)
+	// No retry policy - pass nil for empty retry policy
+	RegisterNode(NotifyCreatorName, processNotifyCreatorNode, nil)
 }
 
 // processNotifyCreatorNode processes the notify creator node

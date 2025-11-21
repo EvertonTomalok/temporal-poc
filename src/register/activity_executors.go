@@ -44,6 +44,7 @@ func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityC
 	// Activities require StartToCloseTimeout to be set
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: activityTimeout,
+		RetryPolicy:         nodes.GetRetryPolicy(nodeName),
 	}
 	activityCtxWithOptions := workflow.WithActivityOptions(ctx, ao)
 

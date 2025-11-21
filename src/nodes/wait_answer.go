@@ -13,7 +13,8 @@ var WaitAnswerName = "wait_answer"
 
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode(WaitAnswerName, waitAnswerProcessorNode)
+	// No retry policy - pass nil for empty retry policy
+	RegisterNode(WaitAnswerName, waitAnswerProcessorNode, nil)
 }
 
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout
