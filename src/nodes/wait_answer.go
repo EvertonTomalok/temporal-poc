@@ -85,8 +85,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
-				ClientAnswered: false,
-				EventType:      "timeout",
+				EventType:      core.EventTypeTimeout,
 			}
 		}
 
@@ -139,8 +138,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
-				ClientAnswered: true,
-				EventType:      "success",
+				EventType:      core.EventTypeSatisfied,
 			}
 		}
 
@@ -163,8 +161,7 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 				ShouldContinue: true,
 				Error:          nil,
 				ActivityName:   "wait_answer",
-				ClientAnswered: false,
-				EventType:      "timeout",
+				EventType:      core.EventTypeTimeout,
 			}
 		}
 	}

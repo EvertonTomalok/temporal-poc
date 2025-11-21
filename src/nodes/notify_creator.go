@@ -24,7 +24,7 @@ func processNotifyCreatorNode(ctx context.Context, activityCtx ActivityContext) 
 	// Only process if client answered (signal received)
 	// If this node is called but client didn't answer, it means it was called after timeout
 	// In that case, we should skip the notification
-	if !activityCtx.ClientAnswered || activityCtx.EventType != "success" {
+	if !activityCtx.ClientAnswered || activityCtx.EventType != core.EventTypeSatisfied {
 		logger.Info("Skipping notify creator - client did not answer (timeout occurred)")
 		return nil
 	}
@@ -51,25 +51,23 @@ func NotifyCreatorWorkflowNode(ctx workflow.Context, workflowID string, startTim
 
 	if !ok || !clientAnswered {
 		logger.Info("NotifyCreatorWorkflowNode: Client did not answer (timeout occurred), skipping notification")
-		// Continue to next node (webhook) - set ClientAnswered and EventType so activity can check
+		// Continue to next node (webhook) - set EventType so activity can check
 		return NodeExecutionResult{
 			ShouldContinue: true,
 			Error:          nil,
-			ActivityName:   "notify_creator", // Activity will check ClientAnswered and skip internally
-			ClientAnswered: false,
-			EventType:      "timeout",
+			ActivityName:   "notify_creator", // Activity will check ClientAnswered from search attributes and skip internally
+			EventType:      core.EventTypeTimeout,
 		}
 	}
 
 	logger.Info("NotifyCreatorWorkflowNode: Client answered, will notify creator")
 	// Return result with activity information - executor will call ExecuteActivity
-	// Set ClientAnswered and EventType so activity knows to process the notification
+	// Set EventType so activity knows to process the notification
 	// After notify_creator, stop the flow (don't continue to webhook)
 	return NodeExecutionResult{
 		ShouldContinue: false,
 		Error:          nil,
 		ActivityName:   "notify_creator",
-		ClientAnswered: true,
-		EventType:      "success",
+		EventType:      core.EventTypeSatisfied,
 	}
 }

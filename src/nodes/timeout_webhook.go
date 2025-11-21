@@ -47,35 +47,6 @@ func WebhookWorkflowNode(ctx workflow.Context, workflowID string, startTime time
 		ShouldContinue: false,
 		Error:          nil,
 		ActivityName:   "webhook",
-		ClientAnswered: false,
 		EventType:      core.EventTypeTimeout,
 	}
-}
-
-// TimeoutWebhookNode handles timeout events and processes them
-// This function contains all the logic for handling timeout events
-// DEPRECATED: Use WebhookWorkflowNode instead
-func TimeoutWebhookNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) error {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("TimeoutWebhookNode: Processing timeout event")
-
-	// Note: Activity execution should be handled by executor, not here
-	// This function is deprecated - use WebhookWorkflowNode instead
-
-	// Update memo to record timeout event
-	memo := map[string]interface{}{
-		"timeout_occurred": true,
-		"timeout_at":       workflow.Now(ctx).UTC(),
-		"event":            "timeout",
-		"workflow_id":      workflowID,
-	}
-	err := workflow.UpsertMemo(ctx, memo)
-	if err != nil {
-		logger.Error("TimeoutWebhookNode: Failed to upsert memo", "error", err)
-	} else {
-		logger.Info("TimeoutWebhookNode: Successfully updated memo with timeout information")
-	}
-
-	logger.Info("TimeoutWebhookNode: Processing completed")
-	return nil
 }

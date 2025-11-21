@@ -3,6 +3,7 @@ package nodes
 import (
 	"context"
 	"math/rand"
+	"temporal-poc/src/core"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -61,7 +62,6 @@ func SendMessageWorkflowNode(ctx workflow.Context, workflowID string, startTime 
 		ShouldContinue: true,
 		Error:          nil,
 		ActivityName:   "send_message",
-		ClientAnswered: false,
-		EventType:      "success",
+		EventType:      core.EventTypeSatisfied,
 	}
 }

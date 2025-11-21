@@ -41,9 +41,9 @@ func Workflow(ctx workflow.Context) error {
 			},
 			"step_2": {
 				Node: "wait_answer",
-				Conditions: &register.Conditions{
-					Success: "step_3",
-					Timeout: "step_4",
+				Condition: &register.Condition{
+					Satisfied: "step_3",
+					Timeout:   "step_4",
 				},
 			},
 			"step_3": {

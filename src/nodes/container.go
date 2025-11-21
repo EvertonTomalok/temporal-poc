@@ -24,13 +24,13 @@ type ActivityProcessor func(ctx context.Context, activityCtx ActivityContext) er
 
 // NodeExecutionResult indicates whether the workflow should continue to the next node or stop
 // It also contains information about the activity to execute
+// NodeExecutionResult is agnostic and only knows about general results
 type NodeExecutionResult struct {
 	ShouldContinue bool
 	Error          error
 	// Activity information - used by executor to call ExecuteActivity
-	ActivityName   string
-	ClientAnswered bool
-	EventType      core.EventType
+	ActivityName string
+	EventType    core.EventType
 }
 
 // ActivityRegistry maintains the order of nodes to be executed dynamically

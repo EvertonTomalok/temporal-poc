@@ -9,17 +9,21 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// Conditions defines conditional branching with two possibilities: success and timeout
-// Can be expanded later if needed
-type Conditions struct {
-	Success string `json:"success"` // Next step when success event occurs (e.g., "step-3")
-	Timeout string `json:"timeout"` // Next step when timeout event occurs (e.g., "step-4")
+// Condition defines conditional branching with condition evaluation and multiple outcomes
+type Condition struct {
+	Condition    string `json:"condition"`     // The condition to evaluate
+	Description  string `json:"description"`   // Description of the condition
+	Satisfied    string `json:"satisfied"`     // Next step when condition is satisfied (e.g., "step-3")
+	NotSatisfied string `json:"not_satisfied"` // Next step when condition is not satisfied (e.g., "step-4")
+	Timeout      string `json:"timeout"`       // Next step when timeout event occurs (e.g., "step-5")
 }
 
-func (c *Conditions) GetNextStep(eventType core.EventType) string {
+func (c *Condition) GetNextStep(eventType core.EventType) string {
 	switch eventType {
-	case core.EventTypeSuccess:
-		return c.Success
+	case core.EventTypeSatisfied:
+		return c.Satisfied
+	case core.EventTypeNotSatisfied:
+		return c.NotSatisfied
 	case core.EventTypeTimeout:
 		return c.Timeout
 	default:
@@ -30,9 +34,9 @@ func (c *Conditions) GetNextStep(eventType core.EventType) string {
 // StepDefinition defines a single step in the workflow
 // It can have either a simple "go_to" for linear flow or "conditions" for conditional branching
 type StepDefinition struct {
-	Node       string      `json:"node"`       // The node name to execute
-	GoTo       string      `json:"go_to"`      // Next step for simple linear flow (optional)
-	Conditions *Conditions `json:"conditions"` // Conditional branching based on event types (optional)
+	Node      string     `json:"node"`      // The node name to execute
+	GoTo      string     `json:"go_to"`     // Next step for simple linear flow (optional)
+	Condition *Condition `json:"condition"` // Conditional branching based on event types (optional)
 }
 
 // WorkflowDefinition defines the entire workflow structure with steps and a starter step
@@ -143,8 +147,8 @@ func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, star
 		nextStep := ""
 
 		// Check conditions first (conditional branching)
-		if stepDef.Conditions != nil && result.EventType != "" {
-			nextStep = stepDef.Conditions.GetNextStep(result.EventType)
+		if stepDef.Condition != nil && result.EventType != "" {
+			nextStep = stepDef.Condition.GetNextStep(result.EventType)
 			if nextStep != "" {
 				logger.Info("Conditional branch selected", "step", currentStep, "event_type", result.EventType, "next_step", nextStep)
 			}
@@ -202,9 +206,13 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 	}
 
 	// Build activity context from workflow node result
+	// Read ClientAnswered from search attributes (agnostic - NodeExecutionResult doesn't know about it)
+	sas := workflow.GetTypedSearchAttributes(ctx)
+	clientAnswered, _ := sas.GetBool(core.ClientAnsweredField)
+
 	activityCtx := ActivityContext{
 		WorkflowID:      workflowID,
-		ClientAnswered:  result.ClientAnswered,
+		ClientAnswered:  clientAnswered,
 		StartTime:       startTime,
 		TimeoutDuration: timeoutDuration,
 		EventTime:       workflow.Now(ctx),

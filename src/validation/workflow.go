@@ -68,12 +68,12 @@ func ValidateWorkflowDefinition(definition register.WorkflowDefinition) error {
 		}
 
 		// Add all condition steps
-		if stepDef.Conditions != nil {
-			if stepDef.Conditions.Success != "" {
-				nextSteps[stepDef.Conditions.Success] = true
+		if stepDef.Condition != nil {
+			if stepDef.Condition.Satisfied != "" {
+				nextSteps[stepDef.Condition.Satisfied] = true
 			}
-			if stepDef.Conditions.Timeout != "" {
-				nextSteps[stepDef.Conditions.Timeout] = true
+			if stepDef.Condition.Timeout != "" {
+				nextSteps[stepDef.Condition.Timeout] = true
 			}
 		}
 

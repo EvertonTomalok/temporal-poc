@@ -7,6 +7,7 @@ func (e EventType) String() string {
 }
 
 const (
-	EventTypeSuccess EventType = "success"
-	EventTypeTimeout EventType = "timeout"
+	EventTypeSatisfied    EventType = "satisfied"
+	EventTypeNotSatisfied EventType = "not_satisfied"
+	EventTypeTimeout      EventType = "timeout"
 )
