@@ -2,10 +2,7 @@ package register
 
 import (
 	"context"
-
 	"temporal-poc/src/nodes"
-
-	"go.temporal.io/sdk/activity"
 )
 
 // ActivityContext is an alias for nodes.ActivityContext
@@ -24,24 +21,17 @@ func GetInstance() *Register {
 	return instance
 }
 
-// GetNamedActivityFunction returns an activity function for a specific node name
-// This allows the activity to appear with the node name in the Temporal UI
-// The nodeName is captured in the closure to ensure the correct processor is called
-func GetNamedActivityFunction(nodeName string) func(context.Context, ActivityContext) error {
-	// Capture nodeName in the closure to avoid closure variable issues
-	capturedNodeName := nodeName
-	return func(ctx context.Context, activityCtx ActivityContext) error {
-		logger := activity.GetLogger(ctx)
-		logger.Info("Processing node", "node_name", capturedNodeName, "workflow_id", activityCtx.WorkflowID)
-
-		processor, exists := nodes.GetProcessor(capturedNodeName)
-		if !exists {
-			logger.Error("Unknown node name", "node_name", capturedNodeName)
-			return nil // Don't fail workflow for unknown nodes
-		}
-
-		return processor(ctx, activityCtx)
-	}
+// ProcessNodeActivity is a generic activity function that processes any node
+// The actual processor (which expects workflow.Context) is called from the workflow node,
+// not from the activity. This activity is a placeholder for UI display purposes.
+// Note: Activities use context.Context, not workflow.Context
+func ProcessNodeActivity(ctx context.Context, activityCtx ActivityContext) error {
+	// Note: The actual processor is called from the workflow node (in ExecuteActivity),
+	// not from here. This activity is registered for UI display purposes.
+	// The processor expects workflow.Context which is only available in workflows.
+	_ = ctx
+	_ = activityCtx
+	return nil
 }
 
 // GetAllRegisteredNodeNames returns all registered node names

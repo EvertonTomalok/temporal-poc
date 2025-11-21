@@ -85,9 +85,6 @@ func ExecuteProcessNodeActivity(ctx workflow.Context, nodeName string, activityC
 // NodeExecutionResult is an alias for nodes.NodeExecutionResult
 type NodeExecutionResult = nodes.NodeExecutionResult
 
-// WorkflowNode is an alias for nodes.WorkflowNode
-type WorkflowNode = nodes.WorkflowNode
-
 // ActivityRegistry holds the workflow definition and execution state
 type ActivityRegistry struct {
 	Definition WorkflowDefinition // Workflow definition with steps and start step
@@ -207,9 +204,11 @@ func ExecuteActivity(ctx workflow.Context, nodeName string, workflowID string, s
 
 	// Execute the workflow node first (this waits for signals, handles timeouts, etc.)
 	logger.Info("ExecuteActivity: Executing workflow node", "node_name", nodeName)
-	// Create a temporary ActivityRegistry for backward compatibility with workflow nodes
-	tempRegistry := &nodes.ActivityRegistry{NodeNames: []string{}}
-	result := workflowNode(ctx, workflowID, startTime, timeoutDuration, tempRegistry)
+	result := workflowNode(ctx, ActivityContext{
+		WorkflowID:      workflowID,
+		StartTime:       startTime,
+		TimeoutDuration: timeoutDuration,
+	})
 	if result.Error != nil {
 		logger.Error("Workflow node execution failed", "node_name", nodeName, "error", result.Error)
 		return result, result.Error

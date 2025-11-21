@@ -59,13 +59,12 @@ func main() {
 
 	// Register all named activities so they appear with node names in the Temporal UI
 	// Each activity is registered with its node name so it appears correctly in the UI
+	// We use the same ProcessNodeActivity function for all nodes, but register it with different names
 	nodeNames := register.GetAllRegisteredNodeNames()
 	log.Printf("Registering %d named activities for UI display", len(nodeNames))
 	for _, nodeName := range nodeNames {
-		// Create a closure that captures the nodeName to avoid loop variable issues
-		nodeName := nodeName
-		namedActivity := register.GetNamedActivityFunction(nodeName)
-		w.RegisterActivityWithOptions(namedActivity, activity.RegisterOptions{
+		// Register the same activity function with different names for UI display
+		w.RegisterActivityWithOptions(register.ProcessNodeActivity, activity.RegisterOptions{
 			Name: nodeName,
 		})
 		log.Printf("  Registered activity: %s", nodeName)

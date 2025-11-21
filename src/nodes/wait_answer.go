@@ -1,10 +1,8 @@
 package nodes
 
 import (
-	"context"
 	"time"
 
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-poc/src/core"
@@ -14,27 +12,13 @@ var WaitAnswerName = "wait_answer"
 
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode(WaitAnswerName, processClientAnsweredProcessorNode, WaitAnswerWorkflowNode)
-}
-
-// processClientAnsweredProcessorNode processes the client-answered processor node
-func processClientAnsweredProcessorNode(ctx context.Context, activityCtx ActivityContext) error {
-	logger := activity.GetLogger(ctx)
-	logger.Info("Processing wait_answer activity", "workflow_id", activityCtx.WorkflowID)
-	logger.Info("wait_answer activity will wait up to 60 seconds for client-answered signal")
-
-	// This activity processes the client-answered event
-	// Note: The actual waiting happens in the workflow node, not in the activity
-	// Search attributes must be updated from workflow context, not activity context
-	logger.Info("Client-answered processor node processed successfully")
-
-	return nil
+	RegisterNode(WaitAnswerName, waitAnswerProcessorNode)
 }
 
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout
 // It returns whether to continue to the next node or stop the flow
 // This node will wait in a loop for a maximum of 60 seconds if no signal is received
-func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult {
+func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("WaitAnswerWorkflowNode: Starting wait_answer - will wait up to 60 seconds for client-answered signal")
 

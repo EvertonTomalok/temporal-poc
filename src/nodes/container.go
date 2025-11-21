@@ -1,7 +1,6 @@
 package nodes
 
 import (
-	"context"
 	"sync"
 	"temporal-poc/src/core"
 	"time"
@@ -20,7 +19,7 @@ type ActivityContext struct {
 }
 
 // ActivityProcessor is a function type that processes an activity
-type ActivityProcessor func(ctx context.Context, activityCtx ActivityContext) error
+type ActivityProcessor func(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult
 
 // NodeExecutionResult contains information about the activity to execute
 // NodeExecutionResult is agnostic and only knows about general results
@@ -37,15 +36,10 @@ type ActivityRegistry struct {
 	NodeNames []string // Ordered list of node names to execute
 }
 
-// WorkflowNode is a function type that represents a workflow node
-// It returns whether to continue to the next node and any error
-type WorkflowNode func(ctx workflow.Context, workflowID string, startTime time.Time, timeoutDuration time.Duration, registry *ActivityRegistry) NodeExecutionResult
-
 // NodeInfo holds information about a registered node
 type NodeInfo struct {
-	Name         string
-	Processor    ActivityProcessor
-	WorkflowNode WorkflowNode
+	Name      string
+	Processor ActivityProcessor
 }
 
 // Container holds all registered nodes with their processors and workflow nodes
@@ -69,16 +63,15 @@ func GetContainer() *Container {
 	return containerInstance
 }
 
-// RegisterNode registers a node name, processor, and workflow node in the container
+// RegisterNode registers a node name and processor in the container
 // This is called by each node's init() function
-func RegisterNode(name string, processor ActivityProcessor, workflowNode WorkflowNode) {
+func RegisterNode(name string, processor ActivityProcessor) {
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	container.nodes[name] = NodeInfo{
-		Name:         name,
-		Processor:    processor,
-		WorkflowNode: workflowNode,
+		Name:      name,
+		Processor: processor,
 	}
 }
 
@@ -117,17 +110,17 @@ func GetProcessor(name string) (ActivityProcessor, bool) {
 }
 
 // GetWorkflowNode returns the workflow node for a given node name
-func (c *Container) GetWorkflowNode(name string) (WorkflowNode, bool) {
+func (c *Container) GetWorkflowNode(name string) (ActivityProcessor, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	nodeInfo, exists := c.nodes[name]
 	if !exists {
 		return nil, false
 	}
-	return nodeInfo.WorkflowNode, true
+	return nodeInfo.Processor, true
 }
 
 // GetWorkflowNode is a convenience function that returns the workflow node for a node name
-func GetWorkflowNode(name string) (WorkflowNode, bool) {
+func GetWorkflowNode(name string) (ActivityProcessor, bool) {
 	return GetContainer().GetWorkflowNode(name)
 }

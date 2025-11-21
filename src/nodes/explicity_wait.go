@@ -1,11 +1,9 @@
 package nodes
 
 import (
-	"context"
 	"temporal-poc/src/core"
 	"time"
 
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -13,30 +11,30 @@ var ExplicitWaitName = "explicity_wait"
 
 func init() {
 	// Register node with container (processor and workflow node)
-	RegisterNode(ExplicitWaitName, processExplicityWaitNode, ExplicityWaitWorkflowNode)
+	RegisterNode(ExplicitWaitName, processExplicityWaitNode)
 }
 
 // processExplicityWaitNode processes the explicity_wait node
 // The actual sleep happens here with proper cancellation handling
-func processExplicityWaitNode(ctx context.Context, activityCtx ActivityContext) error {
-	logger := activity.GetLogger(ctx)
+func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+	logger := workflow.GetLogger(ctx)
 	logger.Info("Processing explicity_wait node", "workflow_id", activityCtx.WorkflowID)
 
 	// TODO: Remove this once we have a proper timeout duration
 	timeoutDuration := 15 * time.Second
 	logger.Info("Sleeping before completion", "duration", timeoutDuration)
-	// Use select to respect context cancellation (Temporal activity cancellation)
-	select {
-	case <-time.After(timeoutDuration):
-		// Sleep completed normally
-	case <-ctx.Done():
-		// Activity was cancelled, return the cancellation error
-		logger.Info("Activity cancelled during sleep")
-		return ctx.Err()
+
+	// Use workflow.Sleep instead of time.After for determinism - this yields to Temporal runtime
+	// workflow.Sleep respects context cancellation and ensures determinism across replays
+	workflow.Sleep(ctx, timeoutDuration)
+	// Sleep completed normally
+	logger.Info("Explicity wait node processed successfully")
+	return NodeExecutionResult{
+		Error:        nil,
+		ActivityName: ExplicitWaitName,
+		EventType:    core.EventTypeSatisfied,
 	}
 
-	logger.Info("Explicity wait node processed successfully")
-	return nil
 }
 
 // ExplicityWaitWorkflowNode is the workflow node that handles explicitly waiting for a period of time
