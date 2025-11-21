@@ -175,7 +175,7 @@ func sendSignalHandler(c echo.Context) error {
 	// Default signal name to "client-answered" if not provided
 	signalName := req.SignalName
 	if signalName == "" {
-		signalName = core.ClientAnsweredSignal
+		signalName = domain.ClientAnsweredSignal
 	}
 
 	// Send signal to workflow

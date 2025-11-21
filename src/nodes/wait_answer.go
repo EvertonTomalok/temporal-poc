@@ -30,7 +30,7 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 	logger.Info("WaitAnswerWorkflowNode: Waiting for client-answered signal or timeout", "timeout_seconds", int(waitAnswerTimeout.Seconds()))
 
 	// Create channel for client-answered signal
-	clientAnsweredChannel := workflow.GetSignalChannel(ctx, "client-answered")
+	clientAnsweredChannel := workflow.GetSignalChannel(ctx, domain.ClientAnsweredSignal)
 
 	// Use the node's own start time (when this node starts executing)
 	// This ensures the timeout is calculated from when the node starts, not from workflow start
