@@ -7,8 +7,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"temporal-poc/src/core/domain"
-	activities "temporal-poc/src/nodes/activities"
-	nodes "temporal-poc/src/nodes/workflow_tasks"
+	"temporal-poc/src/nodes/activities"
+	"temporal-poc/src/nodes/workflow_tasks"
 )
 
 // DEPRECATED: This file contains deprecated types kept only for backward compatibility with validation.
@@ -41,16 +41,16 @@ type NodeCaller interface {
 // NodeInfo holds complete information about a registered node
 // This includes both workflow tasks and activities
 type NodeInfo struct {
-	Name        string                // Node name
-	Type        nodes.NodeType        // NodeTypeActivity or NodeTypeWorkflowTask
-	Caller      NodeCaller            // Processor for workflow tasks, Function for activities
-	RetryPolicy *temporal.RetryPolicy // Retry policy (nil means no retry)
+	Name        string                  // Node name
+	Type        workflow_tasks.NodeType // NodeTypeActivity or NodeTypeWorkflowTask
+	Caller      NodeCaller              // Processor for workflow tasks, Function for activities
+	RetryPolicy *temporal.RetryPolicy   // Retry policy (nil means no retry)
 }
 
 // Register is a singleton that provides unified access to all nodes
 // It aggregates nodes from both workflow tasks container and activities container
 type Register struct {
-	workflowTasksContainer *nodes.Container
+	workflowTasksContainer *workflow_tasks.Container
 	activitiesContainer    *activities.Container
 	allNodes               map[string]NodeInfo
 	mu                     sync.RWMutex
@@ -66,7 +66,7 @@ var (
 func GetInstance() *Register {
 	registerOnce.Do(func() {
 		registerInstance = &Register{
-			workflowTasksContainer: nodes.GetContainer(),
+			workflowTasksContainer: workflow_tasks.GetContainer(),
 			activitiesContainer:    activities.GetContainer(),
 			allNodes:               make(map[string]NodeInfo),
 		}
@@ -98,7 +98,7 @@ func (r *Register) refreshNodes() {
 		if exists {
 			r.allNodes[name] = NodeInfo{
 				Name:        name,
-				Type:        nodes.NodeTypeWorkflowTask,
+				Type:        workflow_tasks.NodeTypeWorkflowTask,
 				Caller:      processor,
 				RetryPolicy: r.workflowTasksContainer.GetRetryPolicy(name),
 			}
@@ -112,7 +112,7 @@ func (r *Register) refreshNodes() {
 		if exists {
 			r.allNodes[name] = NodeInfo{
 				Name:        name,
-				Type:        nodes.NodeTypeActivity,
+				Type:        workflow_tasks.NodeTypeActivity,
 				Caller:      activityFn,
 				RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
 			}
@@ -152,7 +152,7 @@ func (r *Register) GetNodeInfo(name string) (NodeInfo, bool) {
 	if processor, exists := r.workflowTasksContainer.GetProcessor(name); exists {
 		return NodeInfo{
 			Name:        name,
-			Type:        nodes.NodeTypeWorkflowTask,
+			Type:        workflow_tasks.NodeTypeWorkflowTask,
 			Caller:      processor,
 			RetryPolicy: r.workflowTasksContainer.GetRetryPolicy(name),
 		}, true
@@ -162,7 +162,7 @@ func (r *Register) GetNodeInfo(name string) (NodeInfo, bool) {
 	if activityFn, exists := r.activitiesContainer.GetActivity(name); exists {
 		return NodeInfo{
 			Name:        name,
-			Type:        nodes.NodeTypeActivity,
+			Type:        workflow_tasks.NodeTypeActivity,
 			Caller:      activityFn,
 			RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
 		}, true
@@ -172,24 +172,24 @@ func (r *Register) GetNodeInfo(name string) (NodeInfo, bool) {
 }
 
 // GetProcessor returns the processor for a given node name (workflow tasks only)
-func (r *Register) GetProcessor(name string) (nodes.ActivityProcessor, bool) {
+func (r *Register) GetProcessor(name string) (workflow_tasks.ActivityProcessor, bool) {
 	nodeInfo, exists := r.GetNodeInfo(name)
-	if !exists || nodeInfo.Type != nodes.NodeTypeWorkflowTask {
+	if !exists || nodeInfo.Type != workflow_tasks.NodeTypeWorkflowTask {
 		return nil, false
 	}
-	processor, ok := nodeInfo.Caller.(nodes.ActivityProcessor)
+	processor, ok := nodeInfo.Caller.(workflow_tasks.ActivityProcessor)
 	return processor, ok
 }
 
 // GetWorkflowNode returns the workflow node processor for a given node name
-func (r *Register) GetWorkflowNode(name string) (nodes.ActivityProcessor, bool) {
+func (r *Register) GetWorkflowNode(name string) (workflow_tasks.ActivityProcessor, bool) {
 	return r.GetProcessor(name)
 }
 
 // GetActivityFunction returns the activity function for a given node name (activities only)
 func (r *Register) GetActivityFunction(name string) (activities.ActivityFunction, bool) {
 	nodeInfo, exists := r.GetNodeInfo(name)
-	if !exists || nodeInfo.Type != nodes.NodeTypeActivity {
+	if !exists || nodeInfo.Type != workflow_tasks.NodeTypeActivity {
 		return nil, false
 	}
 	activityFn, ok := nodeInfo.Caller.(activities.ActivityFunction)
@@ -217,7 +217,7 @@ func (r *Register) IsWorkflowTask(name string) bool {
 	if !exists {
 		return false
 	}
-	return nodeInfo.Type == nodes.NodeTypeWorkflowTask
+	return nodeInfo.Type == workflow_tasks.NodeTypeWorkflowTask
 }
 
 // Convenience functions that use the singleton instance
@@ -233,12 +233,12 @@ func GetNodeInfo(name string) (NodeInfo, bool) {
 }
 
 // GetProcessor returns the processor for a given node name (workflow tasks only)
-func GetProcessor(name string) (nodes.ActivityProcessor, bool) {
+func GetProcessor(name string) (workflow_tasks.ActivityProcessor, bool) {
 	return GetInstance().GetProcessor(name)
 }
 
 // GetWorkflowNode returns the workflow node processor for a given node name
-func GetWorkflowNode(name string) (nodes.ActivityProcessor, bool) {
+func GetWorkflowNode(name string) (workflow_tasks.ActivityProcessor, bool) {
 	return GetInstance().GetWorkflowNode(name)
 }
 
@@ -259,6 +259,6 @@ func IsWorkflowTask(name string) bool {
 
 // Re-export node types for convenience
 var (
-	NodeTypeActivity     = nodes.NodeTypeActivity
-	NodeTypeWorkflowTask = nodes.NodeTypeWorkflowTask
+	NodeTypeActivity     = workflow_tasks.NodeTypeActivity
+	NodeTypeWorkflowTask = workflow_tasks.NodeTypeWorkflowTask
 )

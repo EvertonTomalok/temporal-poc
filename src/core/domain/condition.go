@@ -1,5 +1,10 @@
 package domain
 
+// StepInput defines the input structure for a step
+type StepInput struct {
+	TimeoutSeconds int64 `json:"timeout_seconds,omitempty"` // Timeout in seconds (optional)
+}
+
 // Condition defines conditional branching with condition evaluation and multiple outcomes
 type Condition struct {
 	Condition    string `json:"condition,omitempty"`     // The condition to evaluate

@@ -1,4 +1,4 @@
-package nodes
+package workflow_tasks
 
 import (
 	"temporal-poc/src/core/domain"

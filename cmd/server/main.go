@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 )
 
 var temporalClient client.Client
@@ -79,6 +80,8 @@ func main() {
 type StartWorkflowRequest struct {
 	// Optional: if not provided, a UUID will be generated
 	WorkflowID string `json:"workflow_id,omitempty"`
+	// Optional: if not provided or invalid, default config will be used
+	Config *workflows.WorkflowConfig `json:"config,omitempty"`
 }
 
 // StartWorkflowResponse represents the response from starting a workflow
@@ -103,8 +106,35 @@ func startWorkflowHandler(c echo.Context) error {
 		workflowID = workflows.GenerateAbandonedCartWorkflowID()
 	}
 
-	// Build default workflow execution config
-	execConfig := workflows.BuildDefaultWorkflowExecutionConfig(workflowID)
+	// Get workflow config from request or use default
+	var workflowConfig workflows.WorkflowConfig
+	if req.Config != nil {
+		// Validate the provided config
+		if err := workflows.ValidateWorkflowConfig(*req.Config); err != nil {
+			// If validation fails, log the error and use default
+			log.Printf("Invalid workflow config provided, using default: %v", err)
+			workflowConfig = workflows.BuildDefaultWorkflowDefinition()
+		} else {
+			// Use the provided config if valid
+			workflowConfig = *req.Config
+		}
+	} else {
+		// Use default config if not provided
+		workflowConfig = workflows.BuildDefaultWorkflowDefinition()
+	}
+
+	// Build workflow execution config with the validated config
+	execConfig := workflows.WorkflowExecutionConfig{
+		Options: client.StartWorkflowOptions{
+			ID:        workflowID,
+			TaskQueue: domain.PrimaryWorkflowTaskQueue,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 1, // No retries
+			},
+		},
+		Config:       workflowConfig,
+		WorkflowName: "DynamicWorkflow",
+	}
 	// Start workflow with retry policy and dynamic workflow
 	we, err := temporalClient.ExecuteWorkflow(
 		context.Background(),

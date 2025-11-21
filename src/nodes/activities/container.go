@@ -19,6 +19,7 @@ type ActivityContext struct {
 	TimeoutDuration time.Duration
 	EventTime       time.Time
 	EventType       domain.EventType
+	Input           *domain.StepInput // Step input (optional) - can be *domain.StepInput or other types
 }
 
 // NodeExecutionResult contains information about the activity to execute

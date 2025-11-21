@@ -1,4 +1,4 @@
-package nodes
+package workflow_tasks
 
 import (
 	"time"
@@ -20,15 +20,15 @@ func init() {
 
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout
 // It returns whether to continue to the next node or stop the flow
-// This node will wait in a loop for a maximum of 60 seconds if no signal is received
+// This node will wait for a configurable timeout (default 30 seconds) if no signal is received
 func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("WaitAnswerWorkflowNode: Starting wait_answer - will wait up to 60 seconds for client-answered signal")
 
-	// This node always uses its own fixed timeout (1 minute / 60 seconds)
-	// The workflow-level timeoutDuration is for the entire workflow, not individual nodes
-	waitAnswerTimeout := 1 * time.Minute
-	logger.Info("WaitAnswerWorkflowNode: Waiting for client-answered signal or timeout", "timeout_seconds", int(waitAnswerTimeout.Seconds()))
+	// Get timeout from input, default to 30 seconds if not provided
+	waitAnswerTimeout := 30 * time.Second
+	if activityCtx.Input.TimeoutSeconds > 0 {
+		waitAnswerTimeout = time.Duration(activityCtx.Input.TimeoutSeconds) * time.Second
+	}
 
 	// Create channel for client-answered signal
 	clientAnsweredChannel := workflow.GetSignalChannel(ctx, domain.ClientAnsweredSignal)

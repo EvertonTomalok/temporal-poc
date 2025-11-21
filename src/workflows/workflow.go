@@ -28,6 +28,7 @@ type StepConfig struct {
 	Node      string            `json:"node"`                // The node name to execute
 	GoTo      string            `json:"go_to,omitempty"`     // Next step for simple linear flow (optional)
 	Condition *domain.Condition `json:"condition,omitempty"` // Conditional branching based on event types (optional)
+	Input     *domain.StepInput `json:"input,omitempty"`     // Step input parameters (optional)
 }
 
 // WorkflowConfig defines the configuration for the dynamic workflow
@@ -50,41 +51,6 @@ func isWorkflowTask(nodeName string) bool {
 	return register.IsWorkflowTask(nodeName)
 }
 
-// BuildDefaultWorkflowDefinition builds the default workflow definition
-// This can be called from the server to build the workflow config dynamically
-func BuildDefaultWorkflowDefinition() WorkflowConfig {
-	return WorkflowConfig{
-		StartStep: "step_1",
-		Steps: map[string]StepConfig{
-			"step_1": {
-				Node: "send_message",
-				GoTo: "step_2",
-			},
-			"step_2": {
-				Node: "wait_answer",
-				Condition: &domain.Condition{
-					Satisfied: "step_3",
-					Timeout:   "step_4",
-				},
-			},
-			"step_3": {
-				Node: "notify_creator",
-			},
-			"step_4": {
-				Node: "webhook",
-				GoTo: "step_5",
-			},
-			"step_5": {
-				Node: "explicity_wait",
-				GoTo: "step_6",
-			},
-			"step_6": {
-				Node: "send_message",
-			},
-		},
-	}
-}
-
 // DynamicWorkflow executes workflow steps dynamically based on configuration
 // Waiters (wait_answer, explicity_wait) execute directly in workflow
 // Activities (send_message, notify_creator, webhook) execute via workflow.ExecuteActivity
@@ -98,7 +64,14 @@ func DynamicWorkflow(ctx workflow.Context, args converter.EncodedValues) error {
 }
 
 // executeWorkflowNode executes a waiter node directly in the workflow (no activity call)
-func executeWorkflowNode(ctx workflow.Context, nodeName string, workflowID string, startTime time.Time, timeoutDuration time.Duration) (activities.NodeExecutionResult, error) {
+func executeWorkflowNode(
+	ctx workflow.Context,
+	nodeName string,
+	workflowID string,
+	startTime time.Time,
+	timeoutDuration time.Duration,
+	input *domain.StepInput,
+) (activities.NodeExecutionResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Executing workflow task node", "node_name", nodeName)
 
@@ -113,6 +86,7 @@ func executeWorkflowNode(ctx workflow.Context, nodeName string, workflowID strin
 		WorkflowID:      workflowID,
 		StartTime:       startTime,
 		TimeoutDuration: timeoutDuration,
+		Input:           input,
 	}
 
 	result := workflowNode(ctx, activityCtx)
@@ -127,7 +101,14 @@ func executeWorkflowNode(ctx workflow.Context, nodeName string, workflowID strin
 
 // executeActivityNode executes an activity node via workflow.ExecuteActivity
 // Activities are called directly as Temporal activities - they don't have processors in workflow context
-func executeActivityNode(ctx workflow.Context, nodeName string, workflowID string, startTime time.Time, timeoutDuration time.Duration) (activities.NodeExecutionResult, error) {
+func executeActivityNode(
+	ctx workflow.Context,
+	nodeName string,
+	workflowID string,
+	startTime time.Time,
+	timeoutDuration time.Duration,
+	input *domain.StepInput,
+) (activities.NodeExecutionResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Executing activity node", "node_name", nodeName)
 
@@ -155,6 +136,7 @@ func executeActivityNode(ctx workflow.Context, nodeName string, workflowID strin
 		TimeoutDuration: timeoutDuration,
 		EventTime:       workflow.Now(ctx),
 		EventType:       domain.EventTypeConditionSatisfied,
+		Input:           input,
 	}
 
 	// Set activity timeout - activities should have reasonable timeouts (max 10 minutes)
@@ -232,6 +214,12 @@ func convertToWorkflowDefinition(config WorkflowConfig) register.WorkflowDefinit
 	}
 }
 
+// ValidateWorkflowConfig validates a WorkflowConfig and returns an error if invalid
+func ValidateWorkflowConfig(config WorkflowConfig) error {
+	definition := convertToWorkflowDefinition(config)
+	return validation.ValidateWorkflowDefinition(definition)
+}
+
 // executeWorkflowConfig is a helper function that executes a workflow config
 // This is shared between DynamicWorkflow and Workflow
 func executeWorkflowConfig(ctx workflow.Context, config WorkflowConfig) error {
@@ -279,10 +267,10 @@ func executeWorkflowConfig(ctx workflow.Context, config WorkflowConfig) error {
 
 		if isWorkflowTask(stepDef.Node) {
 			// Execute workflow task directly in workflow (no activity call)
-			result, err = executeWorkflowNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration)
+			result, err = executeWorkflowNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Input)
 		} else {
 			// Execute activity task via workflow.ExecuteActivity
-			result, err = executeActivityNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration)
+			result, err = executeActivityNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Input)
 		}
 
 		if err != nil {

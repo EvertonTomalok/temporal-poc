@@ -1,4 +1,4 @@
-package activities
+package activity_helpers
 
 import (
 	"context"
