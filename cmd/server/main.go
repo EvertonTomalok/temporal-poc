@@ -179,7 +179,7 @@ func sendSignalHandler(c echo.Context) error {
 
 	// Send signal to workflow
 	// Use empty RunID to signal the latest run if not provided
-	err := temporalClient.SignalWorkflow(context.Background(), workflowID, runID, signalName, nil)
+	err := temporalClient.SignalWorkflow(context.Background(), workflowID, runID, signalName, "some message here")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to signal workflow: %v", err),

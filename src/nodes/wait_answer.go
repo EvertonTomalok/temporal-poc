@@ -69,18 +69,6 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 
 		if remaining <= 0 {
 			logger.Info("WaitAnswerWorkflowNode: Timeout reached before signal")
-			// Update memo to record timeout event
-			memo := map[string]interface{}{
-				"timeout_occurred": true,
-				"timeout_at":       workflow.Now(ctx).UTC(),
-				"event":            "timeout",
-				"workflow_id":      workflowID,
-			}
-			if err := workflow.UpsertMemo(ctx, memo); err != nil {
-				logger.Error("WaitAnswerWorkflowNode: Failed to upsert memo", "error", err)
-			}
-
-			// Return result with activity information - executor will call ExecuteActivity
 			return NodeExecutionResult{
 				ShouldContinue: true,
 				Error:          nil,
@@ -145,18 +133,6 @@ func WaitAnswerWorkflowNode(ctx workflow.Context, workflowID string, startTime t
 		// Check if timer fired (timeout reached)
 		if timer != nil && timer.IsReady() {
 			logger.Info("WaitAnswerWorkflowNode: Timeout reached")
-			// Update memo to record timeout event
-			memo := map[string]interface{}{
-				"timeout_occurred": true,
-				"timeout_at":       workflow.Now(ctx).UTC(),
-				"event":            "timeout",
-				"workflow_id":      workflowID,
-			}
-			if err := workflow.UpsertMemo(ctx, memo); err != nil {
-				logger.Error("WaitAnswerWorkflowNode: Failed to upsert memo", "error", err)
-			}
-
-			// Return result with activity information - executor will call ExecuteActivity
 			return NodeExecutionResult{
 				ShouldContinue: true,
 				Error:          nil,

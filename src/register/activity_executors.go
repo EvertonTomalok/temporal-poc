@@ -135,7 +135,32 @@ func (r *ActivityRegistry) Execute(ctx workflow.Context, workflowID string, star
 			return err
 		}
 
-		logger.Info("Step completed", "step", currentStep, "node", stepDef.Node, "event_type", result.EventType, "should_continue", result.ShouldContinue)
+		// Persist result memo for the activity in the workflow
+		// Use step-specific key to preserve results for all steps
+		stepResultKey := fmt.Sprintf("activity_result_%s", currentStep)
+		memo := map[string]interface{}{
+			stepResultKey: map[string]interface{}{
+				"step":            currentStep,
+				"node":            stepDef.Node,
+				"activity_name":   result.ActivityName,
+				"event_type":      string(result.EventType),
+				"should_continue": result.ShouldContinue,
+				"completed_at":    workflow.Now(ctx).UTC(),
+			},
+			"last_activity_result": map[string]interface{}{
+				"step":            currentStep,
+				"node":            stepDef.Node,
+				"activity_name":   result.ActivityName,
+				"event_type":      string(result.EventType),
+				"should_continue": result.ShouldContinue,
+				"completed_at":    workflow.Now(ctx).UTC(),
+			},
+		}
+		if err := workflow.UpsertMemo(ctx, memo); err != nil {
+			logger.Error("Failed to persist result memo", "step", currentStep, "error", err)
+		} else {
+			logger.Info("Result memo persisted", "step", currentStep, "node", stepDef.Node)
+		}
 
 		// If node indicates to stop, end the flow immediately
 		if !result.ShouldContinue {
