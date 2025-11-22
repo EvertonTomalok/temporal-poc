@@ -14,6 +14,7 @@ import (
 // ActivityContext holds the context passed to activities
 type ActivityContext struct {
 	WorkflowID      string
+	NodeName        string // Node name for identification in UI/logs
 	ClientAnswered  bool
 	StartTime       time.Time
 	TimeoutDuration time.Duration

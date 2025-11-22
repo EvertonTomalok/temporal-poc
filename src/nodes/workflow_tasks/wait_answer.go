@@ -1,6 +1,7 @@
 package workflow_tasks
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -48,9 +49,14 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 
 	clientAnswered := false
 
-	// Create timer outside the loop
+	// Create timer outside the loop with summary for UI visibility
 	timerCtx, cancelTimer := workflow.WithCancel(ctx)
-	timer := workflow.NewTimer(timerCtx, waitAnswerTimeout)
+	timerSummary := fmt.Sprintf("%s-timeout", activityCtx.NodeName)
+	timerOptions := workflow.TimerOptions{
+		Summary: timerSummary,
+	}
+	logger.Info("Creating timer", "node_name", activityCtx.NodeName, "timeout", waitAnswerTimeout, "summary", timerSummary)
+	timer := workflow.NewTimerWithOptions(timerCtx, waitAnswerTimeout, timerOptions)
 
 	// Create selector outside the loop
 	selector := workflow.NewSelector(ctx)
@@ -67,7 +73,7 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 	// Add timer to selector
 	selector.AddFuture(timer, func(f workflow.Future) {
 		cancelTimer()
-		logger.Info("WaitAnswerWorkflowNode: Timeout timer fired")
+		logger.Info("WaitAnswerWorkflowNode: Timeout timer fired", "timer_name", timerSummary, "node_name", activityCtx.NodeName)
 	})
 
 	// Wait for either signal or timeout

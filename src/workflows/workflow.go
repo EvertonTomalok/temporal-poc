@@ -84,6 +84,7 @@ func executeWorkflowNode(
 	// Execute the workflow node directly (this waits for signals, handles timeouts, etc.)
 	activityCtx := activities.ActivityContext{
 		WorkflowID:      workflowID,
+		NodeName:        nodeName, // Node name for timer identification in UI
 		StartTime:       startTime,
 		TimeoutDuration: timeoutDuration,
 		Schema:          schema,
@@ -131,6 +132,7 @@ func executeActivityNode(
 
 	activityCtx := activities.ActivityContext{
 		WorkflowID:      workflowID,
+		NodeName:        nodeName, // Node name for identification in UI/logs
 		ClientAnswered:  clientAnswered,
 		StartTime:       startTime,
 		TimeoutDuration: timeoutDuration,
