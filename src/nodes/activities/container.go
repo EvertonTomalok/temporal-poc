@@ -27,10 +27,11 @@ type ActivityContext struct {
 // NodeExecutionResult is agnostic and only knows about general results
 // Note: ShouldContinue is deprecated - workflow definition (GoTo/Condition) controls flow
 type NodeExecutionResult struct {
-	Error error
+	Error error `json:"error,omitempty"`
 	// Activity information - used by executor to call ExecuteActivity
-	ActivityName string
-	EventType    domain.EventType
+	ActivityName string                 `json:"activity_name"`
+	EventType    domain.EventType       `json:"event_type"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ActivityProcessor is a function type that processes an activity

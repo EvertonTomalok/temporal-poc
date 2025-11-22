@@ -73,6 +73,9 @@ func ValidateWorkflowDefinition(definition register.WorkflowDefinition) error {
 			if stepDef.Condition.Satisfied != "" {
 				nextSteps[stepDef.Condition.Satisfied] = true
 			}
+			if stepDef.Condition.NotSatisfied != "" {
+				nextSteps[stepDef.Condition.NotSatisfied] = true
+			}
 			if stepDef.Condition.Timeout != "" {
 				nextSteps[stepDef.Condition.Timeout] = true
 			}

@@ -8,9 +8,17 @@ import (
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+
+	"temporal-poc/src/core/domain"
 )
 
 const SendMessageActivityName = "send_message"
+
+// SendMessageSchema defines the input schema for send_message activity
+type SendMessageSchema struct {
+	Text      string `json:"text" jsonschema:"description=Message text to send,required"`
+	ChannelID string `json:"channel_id" jsonschema:"description=Channel ID where message will be sent,required"`
+}
 
 func init() {
 	// Register with retry policy for automatic retries on failure
@@ -20,8 +28,11 @@ func init() {
 		MaximumInterval:    time.Minute,
 		MaximumAttempts:    15,
 	}
-	// No schema defined for send_message (no input required)
-	RegisterActivity(SendMessageActivityName, SendMessageActivity, retryPolicy, nil)
+	// Define schema for validation
+	schema := &domain.NodeSchema{
+		SchemaStruct: SendMessageSchema{},
+	}
+	RegisterActivity(SendMessageActivityName, SendMessageActivity, retryPolicy, schema)
 }
 
 // SendMessageActivity sends a message to the client
@@ -52,8 +63,15 @@ func SendMessageActivity(ctx context.Context, activityCtx ActivityContext) (Acti
 	logger.Info("Sleeping before response", "duration", sleepDuration)
 	time.Sleep(sleepDuration)
 
+	logger.Info(
+		"Message sent:",
+		"text", activityCtx.Schema["text"],
+		"channel_id", activityCtx.Schema["channel_id"],
+	)
 	logger.Info("MESSAGE RESPONSE: 200 OK")
 	logger.Info("SendMessageActivity completed successfully")
 
-	return ActivityResult{}, nil
+	return ActivityResult{
+		EventType: domain.EventTypeConditionSatisfied,
+	}, nil
 }

@@ -29,6 +29,10 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 			"step_3": {
 				Node: "send_message", // Activity task
 				GoTo: "step_4",       // Linear flow
+				Schema: map[string]interface{}{ // Schema input validated against node schema
+					"text":       "Hello, this is a test message",
+					"channel_id": "channel_123",
+				},
 			},
 			"step_4": {
 				Node: "wait_answer", // Workflow task (waiter)
@@ -54,6 +58,10 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 			"step_7": {
 				Node: "send_message", // Activity task
 				// Workflow ends here
+				Schema: map[string]interface{}{ // Schema input validated against node schema
+					"text":       "Final message sent",
+					"channel_id": "channel_456",
+				},
 			},
 		},
 	}

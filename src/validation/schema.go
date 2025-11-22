@@ -12,8 +12,8 @@ import (
 	jsonschemav5 "github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-// convertStructToJSONSchema converts a Go struct to JSON Schema format
-func convertStructToJSONSchema(schemaStruct interface{}) ([]byte, error) {
+// ConvertStructToJSONSchema converts a Go struct to JSON Schema format
+func ConvertStructToJSONSchema(schemaStruct interface{}) ([]byte, error) {
 	if schemaStruct == nil {
 		return nil, fmt.Errorf("schema struct is nil")
 	}
@@ -52,7 +52,7 @@ func ValidateStepSchema(nodeName string, stepInput map[string]interface{}) error
 	}
 
 	// Convert struct to JSON Schema
-	jsonSchemaBytes, err := convertStructToJSONSchema(nodeInfo.Schema.SchemaStruct)
+	jsonSchemaBytes, err := ConvertStructToJSONSchema(nodeInfo.Schema.SchemaStruct)
 	if err != nil {
 		return fmt.Errorf("failed to convert schema struct to JSON Schema for node '%s': %w", nodeName, err)
 	}
@@ -114,7 +114,7 @@ func ValidateSchemaData(config register.WorkflowDefinition, schemaData domain.Sc
 			}
 
 			// Convert struct to JSON Schema
-			jsonSchemaBytes, err := convertStructToJSONSchema(nodeInfo.Schema.SchemaStruct)
+			jsonSchemaBytes, err := ConvertStructToJSONSchema(nodeInfo.Schema.SchemaStruct)
 			if err != nil {
 				return fmt.Errorf("failed to convert schema struct to JSON Schema for node '%s': %w", nodeName, err)
 			}

@@ -69,6 +69,7 @@ go run ./cmd/server
 ```
 
 The server will start on port `8081` and provides the following endpoints:
+- `GET /nodes` - Get all available nodes with schemas and information
 - `POST /start-workflow` - Start a new workflow
 - `POST /send-signal` - Send a signal to a running workflow
 
@@ -79,6 +80,9 @@ The server will start on port `8081` and provides the following endpoints:
 You can test the system by starting a workflow:
 
 ```bash
+# Get all available nodes with their schemas
+curl -X GET http://localhost:8081/nodes
+
 # Start a workflow
 curl -X POST http://localhost:8081/start-workflow \
   -H "Content-Type: application/json" \
@@ -99,7 +103,11 @@ curl -X POST http://localhost:8081/start-workflow \
         },
         "step_2": {
           "node": "send_message",
-          "go_to": "step_3"
+          "go_to": "step_3",
+          "schema": {
+            "text": "Hello, this is a test message",
+            "channel_id": "channel_123"
+          }
         },
         "step_3": {
           "node": "notify_creator",
@@ -127,7 +135,11 @@ curl -X POST http://localhost:8081/start-workflow \
           }
         },
         "step_7": {
-          "node": "send_message"
+          "node": "send_message",
+          "schema": {
+            "text": "Final message sent",
+            "channel_id": "channel_456"
+          }
         }
       }
     }
@@ -411,6 +423,10 @@ config := workflows.WorkflowConfig{
         "step_3": {
             Node: "send_message",  // Activity task
             GoTo: "step_4",        // Linear flow
+            Schema: map[string]interface{}{  // Schema input validated against node schema
+                "text":       "Hello, this is a test message",
+                "channel_id": "channel_123",
+            },
         },
         "step_4": {
             Node: "wait_answer",   // Workflow task (waiter)
@@ -436,6 +452,10 @@ config := workflows.WorkflowConfig{
         "step_7": {
             Node: "send_message",  // Activity task
             // Workflow ends here
+            Schema: map[string]interface{}{  // Schema input validated against node schema
+                "text":       "Final message sent",
+                "channel_id": "channel_456",
+            },
         },
     },
 }
@@ -978,6 +998,101 @@ func BoughtAnyOfferActivity(ctx context.Context, activityCtx ActivityContext) (A
 }
 ```
 
+**Example 6: Multiple Required String Fields (send_message)**
+
+```go
+// SendMessageSchema defines the input schema for send_message activity
+type SendMessageSchema struct {
+    Text      string `json:"text" jsonschema:"description=Message text to send,required"`
+    ChannelID string `json:"channel_id" jsonschema:"description=Channel ID where message will be sent,required"`
+}
+
+func init() {
+    // Define schema for validation
+    schema := &domain.NodeSchema{
+        SchemaStruct: SendMessageSchema{},
+    }
+    
+    retryPolicy := &temporal.RetryPolicy{
+        InitialInterval:    time.Second,
+        BackoffCoefficient: 2.0,
+        MaximumInterval:    time.Minute,
+        MaximumAttempts:    15,
+    }
+    
+    RegisterActivity(SendMessageActivityName, SendMessageActivity, retryPolicy, schema)
+}
+```
+
+This schema:
+- Requires both `text` and `channel_id` to be provided
+- Both fields are strings with descriptions
+- Validates that both fields are present when the activity is called
+
+**Usage in workflow**:
+```go
+"step_3": {
+    Node: "send_message",
+    GoTo: "step_4",
+    Schema: map[string]interface{}{
+        "text":       "Hello, this is a test message",
+        "channel_id": "channel_123",
+    },
+}
+```
+
+**Example 7: Required URL with Regex Pattern and Optional Body (webhook)**
+
+```go
+// WebhookSchema defines the input schema for webhook activity
+type WebhookSchema struct {
+    URL  string `json:"url" jsonschema:"description=Webhook URL to call,required,pattern=^https?://.+"`
+    Body string `json:"body,omitempty" jsonschema:"description=Optional request body to send with the webhook"`
+}
+
+func init() {
+    // Define schema for validation
+    schema := &domain.NodeSchema{
+        SchemaStruct: WebhookSchema{},
+    }
+    
+    retryPolicy := &temporal.RetryPolicy{
+        InitialInterval:    time.Second,
+        BackoffCoefficient: 2.0,
+        MaximumInterval:    time.Minute,
+        MaximumAttempts:    15,
+    }
+    
+    RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity, retryPolicy, schema)
+}
+```
+
+This schema:
+- Requires `url` to be provided and validates it matches the pattern `^https?://.+` (must start with `http://` or `https://`)
+- `body` is optional (no `required` tag and `omitempty` in JSON tag)
+- Both fields have descriptions for documentation
+
+**Usage in workflow**:
+```go
+"step_5": {
+    Node: "webhook",
+    GoTo: "step_6",
+    Schema: map[string]interface{}{
+        "url":  "https://example.com/webhook",
+        "body": "{\"event\": \"timeout\", \"workflow_id\": \"abc123\"}",
+    },
+}
+
+// Or without body (optional field):
+"step_5": {
+    Node: "webhook",
+    GoTo: "step_6",
+    Schema: map[string]interface{}{
+        "url": "https://example.com/webhook",
+    },
+}
+```
+
 ##### JSON Schema Tag Syntax
 
 The `jsonschema` tag uses comma-separated key-value pairs:
@@ -1427,6 +1542,10 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
             "step_2": {
                 Node: "send_message",
                 GoTo: "step_3",
+                Schema: map[string]interface{}{
+                    "text":       "Hello, this is a test message",
+                    "channel_id": "channel_123",
+                },
             },
             "step_3": {
                 Node: "notify_creator",
@@ -1455,6 +1574,10 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
             },
             "step_7": {
                 Node: "send_message",
+                Schema: map[string]interface{}{
+                    "text":       "Final message sent",
+                    "channel_id": "channel_456",
+                },
             },
         },
     }
@@ -1525,6 +1648,76 @@ execConfig := workflows.WorkflowExecutionConfig{
 ### HTTP Server Endpoints
 
 ---
+
+#### GET /nodes
+
+---
+
+Get all available nodes (activities and workflow tasks) with their schemas, retry policies, and other information.
+
+**Request**: No request body required.
+
+**Response**:
+```json
+{
+  "nodes": {
+    "send_message": {
+      "name": "send_message",
+      "type": "activity",
+      "retry_policy": {
+        "initial_interval": "1s",
+        "backoff_coefficient": 2.0,
+        "maximum_interval": "1m0s",
+        "maximum_attempts": 15
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Message text to send"
+          },
+          "channel_id": {
+            "type": "string",
+            "description": "Channel ID where message will be sent"
+          }
+        },
+        "required": ["text", "channel_id"]
+      }
+    },
+    "wait_answer": {
+      "name": "wait_answer",
+      "type": "workflow_task",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "timeout_seconds": {
+            "type": "integer",
+            "description": "Timeout in seconds"
+          }
+        },
+        "required": ["timeout_seconds"]
+      }
+    }
+  }
+}
+```
+
+**Example Request**:
+```bash
+curl -X GET http://localhost:8081/nodes
+```
+
+**Response Fields**:
+- `nodes`: A map where each key is a node name and the value contains:
+  - `name`: The node identifier/name
+  - `type`: Either `"activity"` or `"workflow_task"`
+  - `retry_policy`: (Optional) Retry policy configuration with:
+    - `initial_interval`: Initial retry interval (e.g., "1s")
+    - `backoff_coefficient`: Backoff multiplier for retries
+    - `maximum_interval`: Maximum retry interval (e.g., "1m0s")
+    - `maximum_attempts`: Maximum number of retry attempts
+  - `schema`: (Optional) JSON Schema representation of the node's input schema
 
 #### POST /start-workflow
 

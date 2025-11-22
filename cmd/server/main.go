@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
+	"temporal-poc/src/register"
+	"temporal-poc/src/validation"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/labstack/echo/v4"
@@ -61,6 +64,7 @@ func main() {
 	e.Use(middleware.Recover())
 
 	// Routes
+	e.GET("/nodes", getNodesHandler)
 	e.POST("/start-workflow", startWorkflowHandler)
 	e.POST("/send-signal", sendSignalHandler)
 
@@ -68,6 +72,7 @@ func main() {
 	port := ":8081"
 	log.Printf("Server starting on port %s\n", port)
 	log.Println("Endpoints:")
+	log.Println("  GET  /nodes - Get all available nodes with schemas")
 	log.Println("  POST /start-workflow - Start a new workflow")
 	log.Println("  POST /send-signal - Send a signal to a workflow")
 
@@ -295,4 +300,85 @@ func findWorkflowIDByRunID(ctx context.Context, runID string) (string, error) {
 	}
 
 	return "", nil // Not found
+}
+
+// NodeResponse represents the response structure for a single node
+type NodeResponse struct {
+	Name        string                 `json:"name"`
+	Type        string                 `json:"type"` // "activity" or "workflow_task"
+	RetryPolicy *RetryPolicyResponse   `json:"retry_policy,omitempty"`
+	Schema      map[string]interface{} `json:"schema,omitempty"` // JSON Schema format
+}
+
+// RetryPolicyResponse represents the retry policy information
+type RetryPolicyResponse struct {
+	InitialInterval    string  `json:"initial_interval,omitempty"` // Duration as string (e.g., "1s")
+	BackoffCoefficient float64 `json:"backoff_coefficient,omitempty"`
+	MaximumInterval    string  `json:"maximum_interval,omitempty"` // Duration as string
+	MaximumAttempts    int32   `json:"maximum_attempts,omitempty"`
+}
+
+// GetNodesResponse represents the response from the get nodes endpoint
+type GetNodesResponse struct {
+	Nodes map[string]NodeResponse `json:"nodes"` // Key is node name, value is node info
+}
+
+// getNodesHandler handles GET requests to retrieve all available nodes
+func getNodesHandler(c echo.Context) error {
+	reg := register.GetInstance()
+	nodeNames := reg.GetAllNodeNames()
+
+	nodes := make(map[string]NodeResponse)
+
+	for _, nodeName := range nodeNames {
+		nodeInfo, exists := reg.GetNodeInfo(nodeName)
+		if !exists {
+			continue
+		}
+
+		nodeResponse := NodeResponse{
+			Name: nodeInfo.Name,
+		}
+
+		// Set node type
+		switch nodeInfo.Type {
+		case register.NodeTypeActivity:
+			nodeResponse.Type = "activity"
+		case register.NodeTypeWorkflowTask:
+			nodeResponse.Type = "workflow_task"
+		}
+
+		// Set retry policy if available
+		if nodeInfo.RetryPolicy != nil {
+			nodeResponse.RetryPolicy = &RetryPolicyResponse{
+				InitialInterval:    nodeInfo.RetryPolicy.InitialInterval.String(),
+				BackoffCoefficient: nodeInfo.RetryPolicy.BackoffCoefficient,
+				MaximumInterval:    nodeInfo.RetryPolicy.MaximumInterval.String(),
+				MaximumAttempts:    nodeInfo.RetryPolicy.MaximumAttempts,
+			}
+		}
+
+		// Convert schema to JSON Schema format if available
+		if nodeInfo.Schema != nil && nodeInfo.Schema.SchemaStruct != nil {
+			jsonSchemaBytes, err := validation.ConvertStructToJSONSchema(nodeInfo.Schema.SchemaStruct)
+			if err != nil {
+				log.Printf("Warning: Failed to convert schema for node '%s': %v", nodeName, err)
+			} else {
+				var jsonSchema map[string]interface{}
+				if err := json.Unmarshal(jsonSchemaBytes, &jsonSchema); err != nil {
+					log.Printf("Warning: Failed to unmarshal JSON schema for node '%s': %v", nodeName, err)
+				} else {
+					nodeResponse.Schema = jsonSchema
+				}
+			}
+		}
+
+		nodes[nodeName] = nodeResponse
+	}
+
+	response := GetNodesResponse{
+		Nodes: nodes,
+	}
+
+	return c.JSON(http.StatusOK, response)
 }

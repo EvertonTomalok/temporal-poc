@@ -45,15 +45,6 @@ func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext) (Ac
 
 	logger.Info("NotifyCreatorActivity executing", "workflow_id", activityCtx.WorkflowID, "attempt", attempt)
 
-	// Only process if client answered (signal received)
-	// If this activity is called but client didn't answer, it means it was called after timeout
-	// In that case, we should skip the notification
-	if !activityCtx.ClientAnswered || activityCtx.EventType != domain.EventTypeConditionSatisfied {
-		logger.Info("Skipping notify creator - client did not answer (timeout occurred)")
-		// Return success (we're skipping, not failing)
-		return ActivityResult{}, nil
-	}
-
 	// Simulate notifying the creator
 	// In a real implementation, this would make an HTTP call, send an email, etc.
 	logger.Info("NOTIFY CREATOR: Sending notification to creator", "attempt", attempt)
@@ -64,5 +55,7 @@ func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext) (Ac
 	logger.Info("NOTIFY CREATOR RESPONSE: 200 OK")
 	logger.Info("NotifyCreatorActivity completed successfully", "attempt", attempt)
 
-	return ActivityResult{}, nil
+	return ActivityResult{
+		EventType: domain.EventTypeConditionSatisfied,
+	}, nil
 }

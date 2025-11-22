@@ -103,6 +103,7 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 			Error:        nil,
 			ActivityName: WaitAnswerName,
 			EventType:    domain.EventTypeConditionSatisfied,
+			Metadata:     map[string]interface{}{"message": signalPayload.Message},
 		}
 	}
 

@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"temporal-poc/src/core/domain"
 	activity_helpers "temporal-poc/src/nodes/activities/helpers"
 	"time"
 
@@ -11,6 +12,12 @@ import (
 
 const TimeoutWebhookActivityName = "webhook"
 
+// WebhookSchema defines the input schema for webhook activity
+type WebhookSchema struct {
+	URL  string `json:"url" jsonschema:"description=Webhook URL to call,required,pattern=^https?://.+"`
+	Body string `json:"body,omitempty" jsonschema:"description=Optional request body to send with the webhook"`
+}
+
 func init() {
 	// Register with retry policy for automatic retries on failure
 	retryPolicy := &temporal.RetryPolicy{
@@ -19,8 +26,11 @@ func init() {
 		MaximumInterval:    time.Minute,
 		MaximumAttempts:    15,
 	}
-	// No schema defined for webhook (no input required)
-	RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity, retryPolicy, nil)
+	// Define schema for validation
+	schema := &domain.NodeSchema{
+		SchemaStruct: WebhookSchema{},
+	}
+	RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity, retryPolicy, schema)
 }
 
 // TimeoutWebhookActivity sends a webhook notification on timeout
@@ -41,5 +51,7 @@ func TimeoutWebhookActivity(ctx context.Context, activityCtx ActivityContext) (A
 	logger.Info("WebhookWorkflowNode: Processing completed")
 	logger.Info("TimeoutWebhookActivity completed successfully")
 
-	return ActivityResult{}, nil
+	return ActivityResult{
+		EventType: domain.EventTypeConditionSatisfied,
+	}, nil
 }

@@ -117,12 +117,16 @@ func executeActivityNode(
 	reg := register.GetInstance()
 	nodeInfo, exists := reg.GetNodeInfo(nodeName)
 	if !exists {
-		return activities.NodeExecutionResult{}, fmt.Errorf("unknown activity node name: %s", nodeName)
+		return activities.NodeExecutionResult{
+			EventType: domain.EventTypeConditionSatisfied,
+		}, fmt.Errorf("unknown activity node name: %s", nodeName)
 	}
 
 	// Ensure this is actually an activity, not a workflow task
 	if nodeInfo.Type != register.NodeTypeActivity {
-		return activities.NodeExecutionResult{}, fmt.Errorf("node '%s' is not an activity (it's a workflow task)", nodeName)
+		return activities.NodeExecutionResult{
+			EventType: domain.EventTypeConditionSatisfied,
+		}, fmt.Errorf("node '%s' is not an activity (it's a workflow task)", nodeName)
 	}
 
 	// Build activity context
@@ -304,21 +308,23 @@ func executeWorkflowConfig(ctx workflow.Context, config WorkflowConfig) error {
 
 		// Persist result memo for the step in the workflow
 		stepResultKey := fmt.Sprintf("activity_result_%s", currentStep)
+		stepMemo := map[string]interface{}{
+			"step":          currentStep,
+			"node":          stepDef.Node,
+			"activity_name": result.ActivityName,
+			"event_type":    string(result.EventType),
+			"completed_at":  workflow.Now(ctx).UTC(),
+		}
+		if result.Error != nil {
+			stepMemo["error"] = result.Error.Error()
+		}
+		if result.Metadata != nil {
+			stepMemo["metadata"] = result.Metadata
+		}
+
 		memo := map[string]interface{}{
-			stepResultKey: map[string]interface{}{
-				"step":          currentStep,
-				"node":          stepDef.Node,
-				"activity_name": result.ActivityName,
-				"event_type":    string(result.EventType),
-				"completed_at":  workflow.Now(ctx).UTC(),
-			},
-			"last_activity_result": map[string]interface{}{
-				"step":          currentStep,
-				"node":          stepDef.Node,
-				"activity_name": result.ActivityName,
-				"event_type":    string(result.EventType),
-				"completed_at":  workflow.Now(ctx).UTC(),
-			},
+			stepResultKey:          stepMemo,
+			"last_activity_result": stepMemo,
 		}
 		if err := workflow.UpsertMemo(ctx, memo); err != nil {
 			logger.Error("Failed to persist result memo", "step", currentStep, "error", err)
