@@ -225,7 +225,7 @@ func ValidateWorkflowConfig(config WorkflowConfig) error {
 	// Validate step schemas against node schemas
 	for stepName, stepConfig := range config.Steps {
 		if stepConfig.Schema != nil {
-			if err := validation.ValidateStepInput(stepConfig.Node, stepConfig.Schema); err != nil {
+			if err := validation.ValidateStepSchema(stepConfig.Node, stepConfig.Schema); err != nil {
 				return fmt.Errorf("step '%s': %w", stepName, err)
 			}
 		}

@@ -7,13 +7,13 @@ import (
 
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
-	"temporal-poc/src/nodes/activities"
+	"temporal-poc/src/helpers"
 )
 
 var WaitAnswerName = "wait_answer"
 
 type WaitAnswerSchema struct {
-	TimeoutSeconds int64 `json:"timeout_seconds,omitempty" jsonschema:"description=Timeout in seconds (default: 30),default=30"`
+	TimeoutSeconds int64 `json:"timeout_seconds" jsonschema:"description=Timeout in seconds,required"`
 }
 
 func init() {
@@ -37,7 +37,7 @@ func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) 
 
 	// Get timeout from schema, default to 30 seconds if not provided
 	waitAnswerTimeout := 60 * time.Second
-	if schema, err := activities.UnmarshalSchema[WaitAnswerSchema](activityCtx.Schema); err == nil {
+	if schema, err := helpers.UnmarshalSchema[WaitAnswerSchema](activityCtx.Schema); err == nil {
 		if schema.TimeoutSeconds > 0 {
 			waitAnswerTimeout = time.Duration(schema.TimeoutSeconds) * time.Second
 		}

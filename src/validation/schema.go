@@ -32,8 +32,8 @@ func convertStructToJSONSchema(schemaStruct interface{}) ([]byte, error) {
 	return schemaBytes, nil
 }
 
-// ValidateStepInput validates a step's input against the node's schema
-func ValidateStepInput(nodeName string, stepInput map[string]interface{}) error {
+// ValidateStepSchema validates a step's input against the node's schema
+func ValidateStepSchema(nodeName string, stepInput map[string]interface{}) error {
 	reg := register.GetInstance()
 
 	nodeInfo, exists := reg.GetNodeInfo(nodeName)

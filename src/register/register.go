@@ -97,11 +97,13 @@ func (r *Register) refreshNodes() {
 	for _, name := range workflowTaskNames {
 		processor, exists := r.workflowTasksContainer.GetProcessor(name)
 		if exists {
+			schema, _ := r.workflowTasksContainer.GetSchema(name)
 			r.allNodes[name] = NodeInfo{
 				Name:        name,
 				Type:        workflow_tasks.NodeTypeWorkflowTask,
 				Caller:      processor,
 				RetryPolicy: r.workflowTasksContainer.GetRetryPolicy(name),
+				Schema:      schema,
 			}
 		}
 	}
@@ -111,11 +113,13 @@ func (r *Register) refreshNodes() {
 	for _, name := range activityNames {
 		activityFn, exists := r.activitiesContainer.GetActivity(name)
 		if exists {
+			schema, _ := r.activitiesContainer.GetSchema(name)
 			r.allNodes[name] = NodeInfo{
 				Name:        name,
 				Type:        workflow_tasks.NodeTypeActivity,
 				Caller:      activityFn,
 				RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
+				Schema:      schema,
 			}
 		}
 	}
@@ -151,21 +155,25 @@ func (r *Register) GetAllNodeNames() []string {
 func (r *Register) GetNodeInfo(name string) (NodeInfo, bool) {
 	// Check workflow tasks first
 	if processor, exists := r.workflowTasksContainer.GetProcessor(name); exists {
+		schema, _ := r.workflowTasksContainer.GetSchema(name)
 		return NodeInfo{
 			Name:        name,
 			Type:        workflow_tasks.NodeTypeWorkflowTask,
 			Caller:      processor,
 			RetryPolicy: r.workflowTasksContainer.GetRetryPolicy(name),
+			Schema:      schema,
 		}, true
 	}
 
 	// Check activities
 	if activityFn, exists := r.activitiesContainer.GetActivity(name); exists {
+		schema, _ := r.activitiesContainer.GetSchema(name)
 		return NodeInfo{
 			Name:        name,
 			Type:        workflow_tasks.NodeTypeActivity,
 			Caller:      activityFn,
 			RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
+			Schema:      schema,
 		}, true
 	}
 
