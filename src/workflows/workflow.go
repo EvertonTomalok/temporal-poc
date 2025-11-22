@@ -247,23 +247,164 @@ func ValidateWorkflowConfig(config WorkflowConfig) error {
 	return nil
 }
 
+// workflowExecutor holds the execution context for a workflow
+type workflowExecutor struct {
+	ctx             workflow.Context
+	workflowID      string
+	startTime       time.Time
+	timeoutDuration time.Duration
+	config          WorkflowConfig
+}
+
+// newWorkflowExecutor creates a new workflow executor
+func newWorkflowExecutor(ctx workflow.Context, config WorkflowConfig) *workflowExecutor {
+	workflowInfo := workflow.GetInfo(ctx)
+	return &workflowExecutor{
+		ctx:             ctx,
+		workflowID:      workflowInfo.WorkflowExecution.ID,
+		startTime:       workflow.Now(ctx),
+		timeoutDuration: 24 * 30 * time.Hour,
+		config:          config,
+	}
+}
+
+// validateWorkflowDefinition validates the workflow configuration
+func (we *workflowExecutor) validateWorkflowDefinition() error {
+	definition := convertToWorkflowDefinition(we.config)
+	if err := validation.ValidateWorkflowDefinition(definition); err != nil {
+		workflow.GetLogger(we.ctx).Error("DynamicWorkflow: Workflow definition validation failed", "error", err)
+		return err
+	}
+	return nil
+}
+
+// setFinalWorkflowStatus sets the final workflow status in the memo
+func (we *workflowExecutor) setFinalWorkflowStatus(status string, err error) {
+	finalMemo := map[string]interface{}{
+		"workflow_status":       status,
+		"workflow_completed_at": workflow.Now(we.ctx).UTC(),
+	}
+	if err != nil {
+		finalMemo["workflow_error"] = err.Error()
+	}
+	if upsertErr := workflow.UpsertMemo(we.ctx, finalMemo); upsertErr != nil {
+		workflow.GetLogger(we.ctx).Error("Failed to persist final workflow status memo", "error", upsertErr)
+	}
+}
+
+// setStepRunningStatus sets the running status memo for a step and returns the started_at time
+func (we *workflowExecutor) setStepRunningStatus(stepName string, nodeName string) time.Time {
+	startedAt := workflow.Now(we.ctx).UTC()
+	stepResultKey := fmt.Sprintf("activity_result_%s", stepName)
+	stepMemoRunning := map[string]interface{}{
+		"step":       stepName,
+		"node":       nodeName,
+		"status":     "running",
+		"started_at": startedAt,
+	}
+	memoRunning := map[string]interface{}{
+		stepResultKey: stepMemoRunning,
+	}
+	if err := workflow.UpsertMemo(we.ctx, memoRunning); err != nil {
+		workflow.GetLogger(we.ctx).Error("Failed to persist running status memo", "step", stepName, "error", err)
+	}
+	return startedAt
+}
+
+// executeStep executes a single workflow step
+func (we *workflowExecutor) executeStep(stepName string, stepDef StepConfig) (activities.NodeExecutionResult, time.Time, error) {
+	workflow.GetLogger(we.ctx).Info("Executing step", "step", stepName, "node", stepDef.Node)
+
+	// Set status "running" when starting to process the node
+	startedAt := we.setStepRunningStatus(stepName, stepDef.Node)
+
+	// Execute the node - either as workflow task (waiter) or activity task
+	var result activities.NodeExecutionResult
+	var err error
+	if isWorkflowTask(stepDef.Node) {
+		result, err = executeWorkflowNode(we.ctx, stepDef.Node, we.workflowID, we.startTime, we.timeoutDuration, stepDef.Schema)
+	} else {
+		result, err = executeActivityNode(we.ctx, stepDef.Node, we.workflowID, we.startTime, we.timeoutDuration, stepDef.Schema)
+	}
+	return result, startedAt, err
+}
+
+// persistStepResult persists the step execution result in the memo
+func (we *workflowExecutor) persistStepResult(stepName string, nodeName string, result activities.NodeExecutionResult, startedAt time.Time) {
+	stepResultKey := fmt.Sprintf("activity_result_%s", stepName)
+	stepMemo := map[string]interface{}{
+		"step":         stepName,
+		"node":         nodeName,
+		"event_type":   string(result.EventType),
+		"status":       "completed",
+		"started_at":   startedAt, // Preserve started_at from when step began
+		"completed_at": workflow.Now(we.ctx).UTC(),
+	}
+	if result.Error != nil {
+		stepMemo["error"] = result.Error.Error()
+		stepMemo["status"] = "failed"
+	}
+	if result.Metadata != nil {
+		stepMemo["metadata"] = result.Metadata
+	}
+
+	memo := map[string]interface{}{
+		stepResultKey:          stepMemo,
+		"last_activity_result": stepMemo,
+	}
+	if err := workflow.UpsertMemo(we.ctx, memo); err != nil {
+		workflow.GetLogger(we.ctx).Error("Failed to persist result memo", "step", stepName, "error", err)
+	}
+}
+
+// determineNextStep determines the next step based on workflow definition (conditions or go_to)
+func (we *workflowExecutor) determineNextStep(stepName string, stepDef StepConfig, result activities.NodeExecutionResult) string {
+	// Check conditions first (conditional branching)
+	if stepDef.Condition != nil && result.EventType != "" {
+		nextStep := stepDef.Condition.GetNextStep(result.EventType)
+		if nextStep != "" {
+			workflow.GetLogger(we.ctx).Info("Conditional branch selected", "step", stepName, "event_type", result.EventType, "next_step", nextStep)
+			return nextStep
+		}
+	}
+
+	// If no condition matched, use go_to (linear flow)
+	if stepDef.GoTo != "" {
+		workflow.GetLogger(we.ctx).Info("Linear flow to next step", "step", stepName, "next_step", stepDef.GoTo)
+		return stepDef.GoTo
+	}
+
+	// No next step defined
+	return ""
+}
+
+// checkCircularReference checks if a step has been visited before (circular reference)
+func (we *workflowExecutor) checkCircularReference(stepName string, visitedSteps map[string]bool) error {
+	if visitedSteps[stepName] {
+		return fmt.Errorf("circular workflow definition detected at step: %s", stepName)
+	}
+	visitedSteps[stepName] = true
+	return nil
+}
+
+// getStepDefinition retrieves the step definition from the config
+func (we *workflowExecutor) getStepDefinition(stepName string) (StepConfig, error) {
+	stepDef, exists := we.config.Steps[stepName]
+	if !exists {
+		return StepConfig{}, fmt.Errorf("step definition not found: %s", stepName)
+	}
+	return stepDef, nil
+}
+
 // executeWorkflowConfig is a helper function that executes a workflow config
 // This is shared between DynamicWorkflow and Workflow
 func executeWorkflowConfig(ctx workflow.Context, config WorkflowConfig) error {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("DynamicWorkflow started", "StartStep", config.StartStep, "StepsCount", len(config.Steps))
-
-	workflowInfo := workflow.GetInfo(ctx)
-	workflowID := workflowInfo.WorkflowExecution.ID
-	startTime := workflow.Now(ctx)
-	timeoutDuration := 24 * 30 * time.Hour
-
-	// Convert WorkflowConfig to register.WorkflowDefinition for validation
-	definition := convertToWorkflowDefinition(config)
+	executor := newWorkflowExecutor(ctx, config)
+	workflow.GetLogger(ctx).Info("DynamicWorkflow started", "StartStep", config.StartStep, "StepsCount", len(config.Steps))
 
 	// Validate workflow definition before starting execution
-	if err := validation.ValidateWorkflowDefinition(definition); err != nil {
-		logger.Error("DynamicWorkflow: Workflow definition validation failed", "error", err)
+	if err := executor.validateWorkflowDefinition(); err != nil {
+		executor.setFinalWorkflowStatus("failed", err)
 		return err
 	}
 
@@ -273,83 +414,38 @@ func executeWorkflowConfig(ctx workflow.Context, config WorkflowConfig) error {
 
 	for {
 		// Check for infinite loops
-		if visitedSteps[currentStep] {
-			logger.Error("Circular workflow definition detected", "step", currentStep)
-			return fmt.Errorf("circular workflow definition detected at step: %s", currentStep)
-		}
-		visitedSteps[currentStep] = true
-
-		// Get step definition
-		stepDef, exists := config.Steps[currentStep]
-		if !exists {
-			logger.Error("Step definition not found", "step", currentStep)
-			return fmt.Errorf("step definition not found: %s", currentStep)
-		}
-
-		logger.Info("Executing step", "step", currentStep, "node", stepDef.Node)
-
-		// Execute the node - either as workflow task (waiter) or activity task
-		// Schema is passed directly as map[string]interface{} for agnostic access
-		var result activities.NodeExecutionResult
-		var err error
-
-		if isWorkflowTask(stepDef.Node) {
-			// Execute workflow task directly in workflow (no activity call)
-			result, err = executeWorkflowNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Schema)
-		} else {
-			// Execute activity task via workflow.ExecuteActivity
-			result, err = executeActivityNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Schema)
-		}
-
-		if err != nil {
-			logger.Error("Node execution failed", "step", currentStep, "node", stepDef.Node, "error", err)
+		if err := executor.checkCircularReference(currentStep, visitedSteps); err != nil {
+			workflow.GetLogger(executor.ctx).Error("Circular workflow definition detected", "step", currentStep)
+			executor.setFinalWorkflowStatus("failed", err)
 			return err
 		}
 
-		// Persist result memo for the step in the workflow
-		stepResultKey := fmt.Sprintf("activity_result_%s", currentStep)
-		stepMemo := map[string]interface{}{
-			"step":          currentStep,
-			"node":          stepDef.Node,
-			"activity_name": result.ActivityName,
-			"event_type":    string(result.EventType),
-			"completed_at":  workflow.Now(ctx).UTC(),
-		}
-		if result.Error != nil {
-			stepMemo["error"] = result.Error.Error()
-		}
-		if result.Metadata != nil {
-			stepMemo["metadata"] = result.Metadata
+		// Get step definition
+		stepDef, err := executor.getStepDefinition(currentStep)
+		if err != nil {
+			workflow.GetLogger(executor.ctx).Error("Step definition not found", "step", currentStep)
+			executor.setFinalWorkflowStatus("failed", err)
+			return err
 		}
 
-		memo := map[string]interface{}{
-			stepResultKey:          stepMemo,
-			"last_activity_result": stepMemo,
-		}
-		if err := workflow.UpsertMemo(ctx, memo); err != nil {
-			logger.Error("Failed to persist result memo", "step", currentStep, "error", err)
-		}
-
-		// Determine next step based on workflow definition (conditions or go_to)
-		nextStep := ""
-
-		// Check conditions first (conditional branching)
-		if stepDef.Condition != nil && result.EventType != "" {
-			nextStep = stepDef.Condition.GetNextStep(result.EventType)
-			if nextStep != "" {
-				logger.Info("Conditional branch selected", "step", currentStep, "event_type", result.EventType, "next_step", nextStep)
-			}
+		// Execute the step
+		result, startedAt, err := executor.executeStep(currentStep, stepDef)
+		if err != nil {
+			workflow.GetLogger(executor.ctx).Error("Node execution failed", "step", currentStep, "node", stepDef.Node, "error", err)
+			executor.setFinalWorkflowStatus("failed", err)
+			return err
 		}
 
-		// If no condition matched, use go_to (linear flow)
-		if nextStep == "" && stepDef.GoTo != "" {
-			nextStep = stepDef.GoTo
-			logger.Info("Linear flow to next step", "step", currentStep, "next_step", nextStep)
-		}
+		// Persist step result
+		executor.persistStepResult(currentStep, stepDef.Node, result, startedAt)
+
+		// Determine next step
+		nextStep := executor.determineNextStep(currentStep, stepDef, result)
 
 		// If no next step is defined, workflow ends
 		if nextStep == "" {
-			logger.Info("Workflow completed - no next step defined", "step", currentStep)
+			workflow.GetLogger(executor.ctx).Info("Workflow completed - no next step defined", "step", currentStep)
+			executor.setFinalWorkflowStatus("completed", nil)
 			return nil
 		}
 

@@ -72,6 +72,7 @@ The server will start on port `8081` and provides the following endpoints:
 - `GET /nodes` - Get all available nodes with schemas and information
 - `POST /start-workflow` - Start a new workflow
 - `POST /send-signal` - Send a signal to a running workflow
+- `GET /workflow-status/:workflow_id` - Get workflow status and processed steps
 
 ### Step 4: Test the System
 
@@ -149,6 +150,12 @@ curl -X POST http://localhost:8081/start-workflow \
 curl -X POST http://localhost:8081/send-signal \
   -H "Content-Type: application/json" \
   -d '{"workflow_id": "WORKFLOW_ID", "signal_name": "client-answered"}'
+
+# Get workflow status and processed steps
+curl -X GET http://localhost:8081/workflow-status/WORKFLOW_ID
+
+# Get workflow status with specific run_id (optional)
+curl -X GET "http://localhost:8081/workflow-status/WORKFLOW_ID?run_id=RUN_ID"
 ```
 
 Alternatively, you can use the client directly:
@@ -1762,6 +1769,88 @@ Send a signal to a running workflow.
   "message": "Successfully sent 'client-answered' signal to workflow: recovery_cart-abc123"
 }
 ```
+
+#### GET /workflow-status/:workflow_id
+
+---
+
+Get the current status of a workflow execution and list all processed steps.
+
+**Path Parameters**:
+- `workflow_id` (required): The workflow ID to query
+
+**Query Parameters**:
+- `run_id` (optional): Specific run ID to query. If not provided, queries the latest run.
+
+**Response**:
+```json
+{
+  "workflow_id": "workflow-abc123",
+  "run_id": "xyz789",
+  "status": "running",
+  "processed_steps": [
+    {
+      "step": "step_1",
+      "node": "bought_any_offer",
+      "activity_name": "bought_any_offer",
+      "event_type": "condition_satisfied",
+      "completed_at": "2024-01-15T10:30:00Z",
+      "error": "",
+      "metadata": {}
+    },
+    {
+      "step": "step_2",
+      "node": "notify_creator",
+      "activity_name": "notify_creator",
+      "event_type": "condition_satisfied",
+      "completed_at": "2024-01-15T10:31:00Z",
+      "error": "",
+      "metadata": {}
+    }
+  ],
+  "start_time": "2024-01-15T10:29:00Z",
+  "close_time": null
+}
+```
+
+**Status Values**:
+- `running`: Workflow is currently executing
+- `completed`: Workflow finished successfully
+- `failed`: Workflow execution failed
+- `canceled`: Workflow was canceled
+- `terminated`: Workflow was terminated
+- `timed_out`: Workflow execution timed out
+- `continued_as_new`: Workflow continued as a new execution
+- `unknown`: Status could not be determined
+
+**Response Fields**:
+- `workflow_id`: The workflow execution ID
+- `run_id`: The specific run ID
+- `status`: Current workflow status (see status values above)
+- `processed_steps`: Array of steps that have been completed, each containing:
+  - `step`: The step name from the workflow definition
+  - `node`: The node that was executed
+  - `activity_name`: The activity name (if applicable)
+  - `event_type`: The event type returned by the step (e.g., "condition_satisfied")
+  - `completed_at`: Timestamp when the step completed
+  - `error`: Error message if the step failed (empty string if successful)
+  - `metadata`: Additional metadata returned by the step
+- `start_time`: When the workflow execution started
+- `close_time`: When the workflow execution closed (null if still running)
+
+**Example Request**:
+```bash
+# Get status for a workflow
+curl -X GET http://localhost:8081/workflow-status/workflow-abc123
+
+# Get status for a specific run
+curl -X GET "http://localhost:8081/workflow-status/workflow-abc123?run_id=xyz789"
+```
+
+**Error Responses**:
+- `400 Bad Request`: Missing or invalid workflow_id
+- `404 Not Found`: Workflow not found
+- `500 Internal Server Error`: Error querying Temporal server
 
 ## Troubleshooting
 
