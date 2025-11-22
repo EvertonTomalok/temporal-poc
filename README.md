@@ -4,6 +4,77 @@
 
 A Proof of Concept demonstrating a dynamic, node-based workflow orchestration system built on Temporal. This system allows you to define workflows declaratively using a map-based definition structure, with support for conditional branching, signal handling, and timeout management.
 
+## Table of Contents
+
+- [Setup](#setup)
+  - [Prerequisites](#prerequisites)
+  - [Step 1: Clone and Start Temporal Server](#step-1-clone-and-start-temporal-server)
+  - [Step 2: Start the Worker](#step-2-start-the-worker)
+  - [Step 3: Start the Server (HTTP API)](#step-3-start-the-server-http-api)
+  - [Step 4: Test the System](#step-4-test-the-system)
+- [Architecture](#architecture)
+  - [Overview](#overview)
+  - [System Components](#system-components)
+  - [Core Concepts](#core-concepts)
+    - [Workflow Definition](#1-workflow-definition)
+    - [Nodes](#2-nodes)
+    - [Event Types](#3-event-types)
+    - [Conditions](#4-conditions)
+- [Deep Dive: Workflow Definition Structure](#deep-dive-workflow-definition-structure)
+  - [Example Workflow Definition](#example-workflow-definition)
+  - [Workflow Flow Graph](#workflow-flow-graph)
+  - [Flow Execution](#flow-execution)
+  - [Conditional Branching Logic](#conditional-branching-logic)
+- [Deep Dive: Node Execution Flow](#deep-dive-node-execution-flow)
+  - [Execution Methods: Workflow Tasks vs Activity Tasks](#execution-methods-workflow-tasks-vs-activity-tasks)
+  - [Execution Flow Diagram](#execution-flow-diagram)
+  - [Unified Register System](#unified-register-system)
+- [Deep Dive: Node Types](#deep-dive-node-types)
+  - [Send Message Node](#1-send-message-node)
+  - [Wait Answer Node](#2-wait-answer-node)
+  - [Timeout Webhook Node](#3-timeout-webhook-node)
+  - [Explicity Wait Node](#4-explicity-wait-node)
+- [Deep Dive: Search Attributes](#deep-dive-search-attributes)
+- [Deep Dive: Schema Validation](#deep-dive-schema-validation)
+  - [Node Schema Definition](#node-schema-definition)
+  - [Step Schema Input](#step-schema-input)
+  - [Schema Validation Process](#schema-validation-process)
+  - [Using Schema in Nodes](#using-schema-in-nodes)
+- [Deep Dive: Workflow Validation](#deep-dive-workflow-validation)
+- [Retry Policy Configuration](#retry-policy-configuration)
+  - [Configuring Retry Policy](#configuring-retry-policy)
+  - [No Retry Policy](#no-retry-policy)
+  - [Retry Policy Parameters](#retry-policy-parameters)
+- [State Safety and Determinism](#state-safety-and-determinism)
+  - [Worker Restart Scenario](#worker-restart-scenario)
+- [Project Structure](#project-structure)
+- [Key Design Patterns](#key-design-patterns)
+  - [Registry Pattern](#1-registry-pattern)
+  - [Container Pattern](#2-container-pattern)
+  - [Strategy Pattern](#3-strategy-pattern)
+  - [Chain of Responsibility (Implicit)](#4-chain-of-responsibility-implicit)
+- [Extending the System](#extending-the-system)
+  - [Adding a New Node](#adding-a-new-node)
+  - [Workflow Config Builder (Assembler)](#workflow-config-builder-assembler)
+  - [Modifying Workflow Definition](#modifying-workflow-definition)
+- [API Reference](#api-reference)
+  - [HTTP Server Endpoints](#http-server-endpoints)
+    - [GET /nodes](#get-nodes)
+    - [POST /start-workflow](#post-start-workflow)
+    - [POST /send-signal](#post-send-signal)
+    - [GET /workflow-status/:workflow_id](#get-workflow-statusworkflow_id)
+- [Troubleshooting](#troubleshooting)
+  - [Search Attributes Not Registered](#search-attributes-not-registered)
+  - [Worker Not Processing Tasks](#worker-not-processing-tasks)
+  - [Workflow Stuck](#workflow-stuck)
+- [Recent Features](#recent-features)
+- [Future Enhancements](#future-enhancements)
+- [Why Use Temporal: Pros and Cons](#why-use-temporal-pros-and-cons)
+  - [Pros: Why Temporal is Powerful](#pros-why-temporal-is-powerful)
+  - [Cons: Challenges and Considerations](#cons-challenges-and-considerations)
+  - [When to Use Temporal](#when-to-use-temporal)
+  - [Conclusion](#conclusion)
+
 ## Setup
 
 ---
@@ -261,7 +332,7 @@ type StepConfig struct {
 }
 ```
 
-**Note**: The old `WorkflowDefinition` and `StepDefinition` types are deprecated but kept for backward compatibility with validation. New code should use `WorkflowConfig` and `StepConfig`.
+**Note**: The old `WorkflowDefinition` and `StepDefinition` types (in `src/register/register.go`) are deprecated and only kept for backward compatibility with validation. All new code should use `WorkflowConfig` and `StepConfig` from `src/workflows/workflow.go`.
 
 #### 2. Nodes
 
@@ -653,60 +724,6 @@ schema, exists := register.GetNodeInfo(nodeName)
 - Node type is determined at registration time
 - Schema information is stored and available for validation
 
-### Deep Dive: Activity Registry
-
----
-
-The **Activity Registry** (`ActivityRegistry`) is the orchestrator that:
-
-1. **Validates** the workflow definition (checks for circular dependencies)
-2. **Executes** steps in order according to the definition
-3. **Handles** conditional branching based on event types
-4. **Tracks** visited steps to prevent infinite loops
-5. **Persists** execution results in workflow memos
-
-#### Registry Execution Algorithm
-
----
-
-```go
-func (r *ActivityRegistry) Execute(ctx workflow.Context, ...) error {
-    currentStep := r.Definition.StartStep
-    visitedSteps := make(map[string]bool)
-    
-    for {
-        // 1. Check for infinite loops
-        if visitedSteps[currentStep] {
-            return error("circular workflow detected")
-        }
-        visitedSteps[currentStep] = true
-        
-        // 2. Get step definition
-        stepDef := r.Definition.Steps[currentStep]
-        
-        // 3. Execute node (workflow + activity phases)
-        result, err := ExecuteActivity(ctx, stepDef.Node, ...)
-        
-        // 4. Persist result in memo
-        workflow.UpsertMemo(ctx, memo)
-        
-        // 5. Determine next step
-        nextStep := ""
-        if stepDef.Condition != nil {
-            nextStep = stepDef.Condition.GetNextStep(result.EventType)
-        }
-        if nextStep == "" && stepDef.GoTo != "" {
-            nextStep = stepDef.GoTo
-        }
-        
-        // 6. Move to next step or end
-        if nextStep == "" {
-            return nil // Workflow ends
-        }
-        currentStep = nextStep
-    }
-}
-```
 
 ### Deep Dive: Node Types
 
@@ -1161,15 +1178,6 @@ The schema validation process uses industry-standard JSON Schema:
 - **invopop/jsonschema Documentation**: https://github.com/invopop/jsonschema
 - **santhosh-tekuri/jsonschema Documentation**: https://github.com/santhosh-tekuri/jsonschema
 
-```go
-// Validate step schema against node schema
-func ValidateStepSchema(nodeName string, stepInput map[string]interface{}) error {
-    // 1. Get node schema from register
-    // 2. Convert Go struct to JSON Schema
-    // 3. Validate step input against JSON Schema
-    // 4. Return error if validation fails
-}
-```
 
 #### Using Schema in Nodes
 
@@ -1205,16 +1213,11 @@ The system includes workflow definition validation to prevent:
 3. **Missing Start Step**: Validates that start step exists
 4. **Schema Validation**: Validates step inputs against node schemas
 
-The validation uses **Depth-First Search (DFS)** to detect cycles:
-
-```go
-func ValidateWorkflowDefinition(definition WorkflowDefinition) error {
-    // DFS traversal to detect cycles
-    // Check all paths from start step
-    // Validate node names exist in register
-    // Validate step schemas against node schemas
-}
-```
+The validation uses **Depth-First Search (DFS)** to detect cycles. The actual implementation is in `src/validation/workflow.go` and validates:
+- Circular dependencies in workflow definitions
+- All referenced nodes exist in the register (both workflow tasks and activities)
+- Start step exists in the workflow definition
+- Step schemas match node schemas (via `src/validation/schema.go`)
 
 ### Retry Policy Configuration
 
@@ -1354,10 +1357,10 @@ temporal-poc/
 
 ---
 
-The `ActivityRegistry` uses the registry pattern to:
-- Store workflow definitions
-- Orchestrate step execution
-- Handle conditional branching
+The `Register` system uses the registry pattern to:
+- Aggregate nodes from both workflow tasks and activities containers
+- Provide unified node lookup and information retrieval
+- Enable dynamic node registration and discovery
 
 ### 2. Container Pattern
 
@@ -1372,7 +1375,9 @@ The `Container` uses the singleton pattern to:
 
 ---
 
-Each node implements the same interface (`ActivityProcessor`) but provides different strategies:
+Each node implements the same interface but provides different strategies:
+- Workflow tasks use `ActivityProcessor` (for workflow context execution)
+- Activities use `ActivityFunction` (for activity context execution)
 - Different signal handling
 - Different timeout logic
 - Different activity processing
@@ -1735,18 +1740,77 @@ Start a new workflow execution.
 **Request Body**:
 ```json
 {
-  "workflow_id": "optional-custom-id"
+  "workflow_id": "optional-custom-id",
+  "config": {
+    "start_step": "step_1",
+    "steps": {
+      "step_1": {
+        "node": "bought_any_offer",
+        "condition": {
+          "satisfied": "step_2",
+          "not_satisfied": "step_3"
+        },
+        "schema": {
+          "last_minutes": 60
+        }
+      }
+    }
+  }
 }
 ```
+
+**Request Fields**:
+- `workflow_id` (optional): Custom workflow ID. If not provided, a UUID-based ID will be generated automatically.
+- `config` (optional): Custom workflow configuration. If not provided or invalid, the default workflow configuration will be used. The config is validated before execution, including schema validation for step inputs.
 
 **Response**:
 ```json
 {
-  "workflow_id": "recovery_cart-abc123",
+  "workflow_id": "workflow-abc123",
   "run_id": "xyz789",
   "message": "Workflow started successfully"
 }
 ```
+
+**Response Fields**:
+- `workflow_id`: The workflow execution ID (generated or provided)
+- `run_id`: The specific run ID for this execution
+- `message`: Success message
+
+**Example Request**:
+```bash
+# Start workflow with default configuration
+curl -X POST http://localhost:8081/start-workflow \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "my-workflow-123"}'
+
+# Start workflow with custom configuration
+curl -X POST http://localhost:8081/start-workflow \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "custom-workflow",
+    "config": {
+      "start_step": "step_1",
+      "steps": {
+        "step_1": {
+          "node": "send_message",
+          "go_to": "step_2",
+          "schema": {
+            "text": "Hello",
+            "channel_id": "channel_123"
+          }
+        },
+        "step_2": {
+          "node": "notify_creator"
+        }
+      }
+    }
+  }'
+```
+
+**Error Responses**:
+- `400 Bad Request`: Invalid request body or workflow configuration validation failed
+- `500 Internal Server Error`: Error starting workflow execution
 
 #### POST /send-signal
 
@@ -1757,18 +1821,50 @@ Send a signal to a running workflow.
 **Request Body**:
 ```json
 {
-  "workflow_id": "recovery_cart-abc123",
+  "workflow_id": "workflow-abc123",
   "run_id": "optional-run-id",
-  "signal_name": "client-answered"
+  "signal_name": "client-answered",
+  "message": "optional-message"
 }
 ```
+
+**Request Fields**:
+- `workflow_id` (optional): The workflow ID to signal. Either `workflow_id` or `run_id` must be provided.
+- `run_id` (optional): The specific run ID to signal. If only `run_id` is provided, the system will find the corresponding workflow ID.
+- `signal_name` (optional): The name of the signal to send. Defaults to `"client-answered"` if not provided.
+- `message` (optional): Optional message payload to send with the signal.
 
 **Response**:
 ```json
 {
-  "message": "Successfully sent 'client-answered' signal to workflow: recovery_cart-abc123"
+  "message": "Successfully sent 'client-answered' signal to workflow: workflow-abc123"
 }
 ```
+
+**Example Request**:
+```bash
+# Send signal with workflow ID
+curl -X POST http://localhost:8081/send-signal \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "workflow-abc123",
+    "signal_name": "client-answered",
+    "message": "User responded"
+  }'
+
+# Send signal with run ID only
+curl -X POST http://localhost:8081/send-signal \
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_id": "xyz789",
+    "signal_name": "client-answered"
+  }'
+```
+
+**Error Responses**:
+- `400 Bad Request`: Missing required fields (workflow_id or run_id)
+- `404 Not Found`: Workflow not found (when using run_id only)
+- `500 Internal Server Error`: Error sending signal
 
 #### GET /workflow-status/:workflow_id
 
@@ -1794,6 +1890,7 @@ Get the current status of a workflow execution and list all processed steps.
       "node": "bought_any_offer",
       "activity_name": "bought_any_offer",
       "event_type": "condition_satisfied",
+      "started_at": "2024-01-15T10:29:30Z",
       "completed_at": "2024-01-15T10:30:00Z",
       "error": "",
       "metadata": {}
@@ -1803,6 +1900,7 @@ Get the current status of a workflow execution and list all processed steps.
       "node": "notify_creator",
       "activity_name": "notify_creator",
       "event_type": "condition_satisfied",
+      "started_at": "2024-01-15T10:30:15Z",
       "completed_at": "2024-01-15T10:31:00Z",
       "error": "",
       "metadata": {}
@@ -1827,12 +1925,13 @@ Get the current status of a workflow execution and list all processed steps.
 - `workflow_id`: The workflow execution ID
 - `run_id`: The specific run ID
 - `status`: Current workflow status (see status values above)
-- `processed_steps`: Array of steps that have been completed, each containing:
+- `processed_steps`: Array of steps that have been completed, sorted by execution order, each containing:
   - `step`: The step name from the workflow definition
   - `node`: The node that was executed
   - `activity_name`: The activity name (if applicable)
   - `event_type`: The event type returned by the step (e.g., "condition_satisfied")
-  - `completed_at`: Timestamp when the step completed
+  - `started_at`: Timestamp when the step started execution (optional)
+  - `completed_at`: Timestamp when the step completed (optional)
   - `error`: Error message if the step failed (empty string if successful)
   - `metadata`: Additional metadata returned by the step
 - `start_time`: When the workflow execution started
@@ -1923,7 +2022,7 @@ temporal operator search-attributes add -name ClientAnsweredAt -type Datetime
 
 ---
 
-- [ ] Dynamic workflow definition loading (JSON/YAML)
+- [x] Dynamic workflow definition loading (JSON/YAML)
 - [ ] Visual workflow builder (drag-and-drop UI)
 - [ ] Workflow versioning and migration
 - [x] Enhanced error handling and retry logic (per-node retry policy configuration)
@@ -1947,3 +2046,195 @@ temporal operator search-attributes add -name ClientAnsweredAt -type Datetime
     - [ ] Authentication/authorization tied to tenant identity
     - [ ] API requests and operations scoped to the authenticated tenant
 - [ ] Workflow scheduling and cron support
+
+## Why Use Temporal: Pros and Cons
+
+---
+
+This section provides a balanced perspective on using Temporal for workflow orchestration, helping you make an informed decision about whether it's the right fit for your use case.
+
+### Pros: Why Temporal is Powerful
+
+---
+
+#### 1. **Durability and Reliability**
+
+- **Automatic Recovery**: Workflows automatically recover from worker crashes, network failures, and infrastructure issues
+- **Event Sourcing**: Complete execution history is stored, enabling deterministic replay and state reconstruction
+- **Zero Data Loss**: Workflow state is persisted in the database, not in worker memory
+- **Guaranteed Execution**: Once a workflow starts, it will complete (or fail explicitly) - no silent failures
+
+**Real-World Impact**: Your workflows survive server restarts, deployments, and infrastructure failures without manual intervention.
+
+#### 2. **Developer Experience**
+
+- **Familiar Code**: Write workflow logic in your preferred language (Go, Java, Python, TypeScript, etc.) using standard language constructs
+- **No State Machines**: Define workflows as code, not complex state machine diagrams
+- **Type Safety**: Strong typing and compile-time checks (depending on language)
+- **Rich SDKs**: Well-documented SDKs with comprehensive examples and community support
+
+**Real-World Impact**: Developers can write workflow logic using familiar patterns, reducing onboarding time and cognitive load.
+
+#### 3. **Scalability and Performance**
+
+- **Horizontal Scaling**: Add workers to scale processing capacity without code changes
+- **Task Queue Distribution**: Temporal automatically distributes tasks across available workers
+- **High Throughput**: Can handle millions of workflow executions per day
+- **Efficient Resource Usage**: Workers only consume resources when processing tasks
+
+**Real-World Impact**: Scale your workflow processing by adding more workers, not by rewriting code.
+
+#### 4. **Observability and Debugging**
+
+- **Complete History**: Every workflow execution has a complete, queryable history
+- **Web UI**: Built-in UI for viewing workflow executions, history, and debugging
+- **Search Attributes**: Index and query workflows by custom attributes
+- **Metrics Integration**: Built-in metrics and integration with observability tools
+
+**Real-World Impact**: Debug production issues by replaying exact workflow executions and inspecting state at any point.
+
+#### 5. **Advanced Features**
+
+- **Signals**: Send data to running workflows without blocking
+- **Queries**: Query workflow state at any time without affecting execution
+- **Updates**: Modify workflow behavior while it's running
+- **Child Workflows**: Compose complex workflows from simpler ones
+- **Schedules**: Recurring workflow executions with cron-like syntax
+- **Versioning**: Handle workflow code changes gracefully with versioning
+    - Workflow versioning is Temporal's mechanism for safely evolving workflow code without breaking running workflows. It ensures backward compatibility by allowing multiple code paths to coexist, with Temporal automatically selecting the correct path based on when each workflow started. This is essential for production systems where workflows can run for hours, days, or weeks and you need to deploy code changes during that time.
+
+**Real-World Impact**: Build sophisticated orchestration patterns that would be difficult or impossible with traditional approaches.
+
+#### 6. **Separation of Concerns**
+
+- **Workflow Logic**: Handles orchestration, flow control, and state management
+- **Activity Logic**: Handles external operations, API calls, and non-deterministic work
+- **Clear Boundaries**: Forces separation between deterministic workflow code and non-deterministic activity code
+
+**Real-World Impact**: Cleaner architecture with clear responsibilities for each component.
+
+#### 7. **Retry and Error Handling**
+
+- **Built-in Retries**: Configurable retry policies with exponential backoff
+- **Error Classification**: Distinguish between retryable and non-retryable errors
+- **Timeout Management**: Built-in support for activity timeouts and workflow timeouts
+- **Failure Recovery**: Automatic retry of failed activities without manual intervention
+
+**Real-World Impact**: Robust error handling without writing complex retry logic yourself.
+
+### Cons: Challenges and Considerations
+
+---
+
+#### 1. **Learning Curve**
+
+- **Determinism Requirements**: Developers must understand what makes code deterministic (no `time.Now()`, `rand`, etc.)
+- **Event Sourcing Model**: Understanding how workflow replay works can be challenging initially
+- **Workflow vs Activity**: Knowing when to use workflow code vs activity code requires experience
+- **Temporal Concepts**: Signals, queries, updates, and other Temporal-specific concepts require learning
+
+**Mitigation**: Start with simple workflows, use Temporal's deterministic APIs (`workflow.Now()`, `workflow.Sleep()`), and gradually build complexity.
+
+#### 2. **Infrastructure Complexity**
+
+- **Temporal Server**: Requires running and maintaining Temporal server (or using Temporal Cloud)
+- **Database Dependency**: Requires a database (PostgreSQL, MySQL, Cassandra) for persistence
+- **Visibility Store**: Requires Elasticsearch or OpenSearch for advanced visibility features
+- **Operational Overhead**: Monitoring, backups, scaling, and maintenance of Temporal infrastructure
+
+**Mitigation**: 
+- Use Temporal Cloud (managed service) to eliminate infrastructure management
+- Start with Docker Compose for development (as shown in this POC)
+- Use Temporal's Helm charts for Kubernetes deployments
+
+#### 3. **Cost Considerations**
+
+- **Infrastructure Costs**: Running Temporal server, database, and visibility store requires compute and storage resources
+- **Temporal Cloud**: Managed service has pricing based on workflow executions and data storage
+- **Database Storage**: Workflow history can grow large over time, requiring storage management
+- **Resource Usage**: Workers consume CPU and memory even when idle (though minimal)
+
+**Mitigation**: 
+- Use workflow retention policies to limit history storage
+- Monitor and optimize workflow execution patterns
+- Consider Temporal Cloud for predictable pricing vs. self-hosted infrastructure costs
+
+#### 4. **Debugging Complexity**
+
+- **Replay-Based Debugging**: Understanding workflow replay can be challenging when debugging issues
+- **Non-Deterministic Errors**: Non-deterministic code causes replay failures that can be hard to diagnose
+- **History Inspection**: Large workflow histories can be difficult to navigate
+- **Distributed Debugging**: Debugging distributed workflows across multiple workers requires different tools
+
+**Mitigation**: 
+- Use Temporal Web UI for visual debugging
+- Add logging to activities (not workflows) for easier debugging
+- Use workflow queries to inspect state without affecting execution
+- Start with simple workflows to build debugging skills
+
+#### 5. **Development Workflow**
+
+- **Local Development**: Setting up local Temporal server for development requires additional setup
+- **Testing**: Testing workflows requires understanding replay semantics and using Temporal's test framework
+- **Code Changes**: Workflow code changes require careful versioning to avoid breaking running workflows
+- **Deployment**: Deploying workflow code changes requires coordination with running workflows
+
+**Mitigation**: 
+- Use Docker Compose for local development (as in this POC)
+- Use Temporal's test framework for unit testing workflows
+- Implement workflow versioning strategies early
+- Use feature flags or gradual rollouts for workflow changes
+
+#### 6. **Performance Considerations**
+
+- **Workflow History Size**: Large histories can impact replay performance
+- **Activity Latency**: Activities execute asynchronously, which may not fit all use cases
+- **Task Queue Contention**: High task volume can cause queue contention and delays
+- **Database Load**: Workflow history writes can create database load
+
+**Mitigation**: 
+- Use workflow versioning and continue-as-new for long-running workflows
+- Optimize activity execution time
+- Use multiple task queues for different workflow types
+- Monitor and scale database resources as needed
+
+#### 7. **Vendor Lock-in**
+
+- **Temporal-Specific APIs**: Code uses Temporal SDKs and APIs, creating dependency on Temporal
+- **Migration Complexity**: Migrating away from Temporal would require significant refactoring
+- **Learning Investment**: Team knowledge becomes Temporal-specific
+
+**Mitigation**: 
+- Abstract Temporal-specific code behind interfaces where possible
+- Use Temporal's open-source nature as insurance (can self-host)
+- Consider Temporal Cloud's SLA and support for production use
+
+### When to Use Temporal
+
+---
+
+**Temporal is a great fit for**:
+- Long-running business processes (hours, days, weeks)
+- Workflows requiring human interaction or external events
+- Complex orchestration with multiple steps and conditional logic
+- Systems requiring high reliability and durability
+- Workflows that need to survive infrastructure failures
+- Processes with retry and error handling requirements
+- Systems requiring workflow observability and debugging
+
+**Temporal may be overkill for**:
+- Simple, short-lived operations (< 1 minute)
+- Stateless request/response patterns
+- Real-time systems requiring sub-second latency
+- Simple CRUD operations
+- Workflows that don't require durability guarantees
+
+### Conclusion
+
+---
+
+Temporal provides powerful capabilities for building durable, reliable workflow orchestration systems. The learning curve and infrastructure requirements are real, but the benefits of automatic recovery, observability, and scalability often outweigh the costs for complex orchestration needs.
+
+**Recommendation**: Start with a proof of concept (like this one) to evaluate Temporal for your specific use case. Use Temporal Cloud for production to reduce infrastructure complexity, or self-host if you have the operational expertise and requirements.
+
+The investment in learning Temporal pays off when you need workflows that are reliable, observable, and maintainable at scale.
