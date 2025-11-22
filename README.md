@@ -88,10 +88,6 @@ curl -X POST http://localhost:8081/start-workflow \
       "start_step": "step_1",
       "steps": {
         "step_1": {
-          "node": "send_message",
-          "go_to": "step_2"
-        },
-        "step_2": {
           "node": "bought_any_offer",
           "condition": {
             "satisfied": "step_3",
@@ -101,8 +97,13 @@ curl -X POST http://localhost:8081/start-workflow \
             "last_minutes": 60
           }
         },
+        "step_2": {
+          "node": "send_message",
+          "go_to": "step_3"
+        },
         "step_3": {
-          "node": "notify_creator"
+          "node": "notify_creator",
+          "go_to": "step_2"
         },
         "step_4": {
           "node": "wait_answer",
@@ -392,27 +393,26 @@ config := workflows.WorkflowConfig{
     StartStep: "step_1",
     Steps: map[string]workflows.StepConfig{
         "step_1": {
-            Node: "send_message",  // Activity task
-            GoTo: "step_2",        // Linear flow
-        },
-        "step_2": {
             Node: "bought_any_offer",  // Activity task with conditional branching
             Condition: &domain.Condition{
-                Satisfied:    "step_3",  // If offer found (condition_satisfied)
-                NotSatisfied: "step_4",  // If no offer found (condition_not_satisfied)
+                Satisfied:    "step_2",  // If offer found (condition_satisfied)
+                NotSatisfied: "step_3",  // If no offer found (condition_not_satisfied)
             },
             Schema: map[string]interface{}{  // Schema input validated against node schema
                 "last_minutes": int64(60),
             },
         },
+        "step_2": {
+            Node: "notify_creator",
+        },
         "step_3": {
-            Node: "notify_creator",  // Activity task
-            // No GoTo or Condition = workflow ends
+            Node: "send_message",  // Activity task
+            GoTo: "step_4",        // Linear flow
         },
         "step_4": {
             Node: "wait_answer",   // Workflow task (waiter)
             Condition: &domain.Condition{
-                Satisfied: "step_3",  // If signal received
+                Satisfied: "step_2",  // If signal received
                 Timeout:   "step_5",  // If timeout occurs
             },
             Schema: map[string]interface{}{  // Schema input validated against node schema
@@ -438,7 +438,7 @@ config := workflows.WorkflowConfig{
 **Key Features**:
 - Uses `WorkflowConfig` and `StepConfig` (new structure)
 - Mixes workflow tasks (`wait_answer`, `explicity_wait`) and activity tasks (`send_message`, `notify_creator`, `webhook`)
-- Includes schema input for `step_2` that is validated against the `wait_answer` node's schema
+- Includes schema input for `step_4` that is validated against the `wait_answer` node's schema
 - Demonstrates both linear flow (`GoTo`) and conditional branching (`Condition`)
 
 #### Workflow Flow Graph
@@ -447,16 +447,16 @@ config := workflows.WorkflowConfig{
 
 ```mermaid
 flowchart TD
-    Start([Start]) --> step1[step_1<br/>send_message]
-    step1 --> step2[step_2<br/>bought_any_offer]
-    step2 -->|Offer Found<br/>condition_satisfied| step3[step_3<br/>notify_creator]
-    step2 -->|No Offer<br/>condition_not_satisfied| step4[step_4<br/>wait_answer]
-    step3 --> End1([End])
-    step4 -->|Signal Received<br/>condition_satisfied| step3
+    Start([Start]) --> step1[step_1<br/>bought_any_offer]
+    step1 -->|Offer Found<br/>condition_satisfied| step2[step_2<br/>notify_creator]
+    step1 -->|No Offer<br/>condition_not_satisfied| step3[step_3<br/>send_message]
+    step3 --> step4[step_4<br/>wait_answer]
+    step4 -->|Signal Received<br/>condition_satisfied| step2
     step4 -->|Timeout<br/>condition_timeout| step5[step_5<br/>webhook]
     step5 --> step6[step_6<br/>explicity_wait]
     step6 --> step7[step_7<br/>send_message]
     step7 --> End2([End])
+    step2 --> End1([End])
 ```
 
 #### Flow Execution
@@ -464,18 +464,18 @@ flowchart TD
 ---
 
 1. **Start**: Workflow begins at `step_1` (defined by `StartStep`)
-2. **Step 1**: Executes `send_message` node, then goes to `step_2` (via `GoTo`)
-3. **Step 2**: Executes `bought_any_offer` activity, which:
+2. **Step 1**: Executes `bought_any_offer` activity, which:
    - Checks if user bought any offer in the last N minutes (fake database call with random probability)
    - Uses random probability: 20% chance of `condition_satisfied` (offer found), 80% chance of `condition_not_satisfied` (no offer found)
    - Returns event type based on random result
-   - Based on event type, goes to either `step_3` (notify creator) or `step_4` (wait answer)
-4. **Step 3** (if offer found): Executes `notify_creator` node, workflow ends
-5. **Step 4** (if no offer found): Executes `wait_answer` node, which:
+   - Based on event type, goes to either `step_2` (notify creator) or `step_3` (send message)
+3. **Step 2** (if offer found): Executes `notify_creator` node, workflow ends
+4. **Step 3** (if no offer found): Executes `send_message` node, then goes to `step_4` (via `GoTo`)
+5. **Step 4** (after step_3): Executes `wait_answer` node, which:
    - Waits for "client-answered" signal OR
    - Waits for timeout (30 seconds)
    - Returns `condition_satisfied` or `condition_timeout` event type
-   - Based on event type, goes to either `step_3` (notify creator) or `step_5` (webhook)
+   - Based on event type, goes to either `step_2` (notify creator) or `step_5` (webhook)
 6. **Step 5** (if timeout): Executes `webhook` node, then goes to `step_6`
 7. **Step 6**: Executes `explicity_wait` node, then goes to `step_7`
 8. **Step 7**: Executes `send_message` node, workflow ends
@@ -910,11 +910,11 @@ func BoughtAnyOfferActivity(ctx context.Context, activityCtx ActivityContext) (A
 
 **Usage in workflow**:
 ```go
-"step_2": {
+"step_1": {
     Node: "bought_any_offer",
     Condition: &domain.Condition{
-        Satisfied:    "step_3",    // 20% chance - notify creator
-        NotSatisfied: "step_4",    // 80% chance - wait answer
+        Satisfied:    "step_2",    // 20% chance - notify creator
+        NotSatisfied: "step_3",    // 80% chance - send message then wait answer
     },
     Schema: map[string]interface{}{
         "last_minutes": int64(60), // Must be >= 0, validated automatically
@@ -944,11 +944,11 @@ jsonschema:"key1=value1,key2=value2,key3=value3"
 Steps can provide input data that is validated against the node's schema:
 
 ```go
-"step_2": {
+"step_4": {
     Node: "wait_answer",
     Condition: &domain.Condition{
         Satisfied: "step_3",
-        Timeout:   "step_4",
+        Timeout:   "step_5",
     },
     Schema: map[string]interface{}{
         "timeout_seconds": int64(30),
@@ -1359,26 +1359,27 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
         StartStep: "step_1",
         Steps: map[string]StepConfig{
             "step_1": {
-                Node: "send_message",
-                GoTo: "step_2",
-            },
-            "step_2": {
                 Node: "bought_any_offer",
                 Condition: &domain.Condition{
-                    Satisfied:    "step_3",
-                    NotSatisfied: "step_4",
+                    Satisfied:    "step_2",
+                    NotSatisfied: "step_3",
                 },
                 Schema: map[string]interface{}{
                     "last_minutes": int64(60),
                 },
             },
+            "step_2": {
+                Node: "send_message",
+                GoTo: "step_3",
+            },
             "step_3": {
                 Node: "notify_creator",
+                GoTo: "step_2",
             },
             "step_4": {
                 Node: "wait_answer",
                 Condition: &domain.Condition{
-                    Satisfied: "step_3",
+                    Satisfied: "step_2",
                     Timeout:   "step_5",
                 },
                 Schema: map[string]interface{}{
@@ -1437,7 +1438,7 @@ The workflow definition can be modified in several ways:
 ```go
 config := workflows.BuildDefaultWorkflowDefinition()
 // Modify config
-config.Steps["step_2"].Schema["timeout_seconds"] = int64(60)
+config.Steps["step_1"].Schema["last_minutes"] = int64(120)
 
 // Validate before execution
 if err := workflows.ValidateWorkflowConfig(config); err != nil {

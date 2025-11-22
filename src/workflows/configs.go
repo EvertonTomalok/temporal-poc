@@ -14,42 +14,43 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 		StartStep: "step_1",
 		Steps: map[string]StepConfig{
 			"step_1": {
-				Node: "send_message",
-				GoTo: "step_2",
+				Node: "bought_any_offer", // Activity task with conditional branching
+				Condition: &domain.Condition{
+					Satisfied:    "step_2", // If offer found (condition_satisfied)
+					NotSatisfied: "step_3", // If no offer found (condition_not_satisfied)
+				},
+				Schema: map[string]interface{}{ // Schema input validated against node schema
+					"last_minutes": int64(60),
+				},
 			},
 			"step_2": {
-				Node: "bought_any_offer",
-				Condition: &domain.Condition{
-					Satisfied:    "step_3", // Notify creator if condition satisfied
-					NotSatisfied: "step_4", // Move to step 4 (old step 2 - wait_answer) if not satisfied
-				},
-				Schema: map[string]interface{}{
-					"last_minutes": int64(60), // Example: check last 60 minutes
-				},
-			},
-			"step_3": {
 				Node: "notify_creator",
 			},
+			"step_3": {
+				Node: "send_message", // Activity task
+				GoTo: "step_4",       // Linear flow
+			},
 			"step_4": {
-				Node: "wait_answer",
+				Node: "wait_answer", // Workflow task (waiter)
 				Condition: &domain.Condition{
-					Satisfied: "step_3",
-					Timeout:   "step_5",
+					Satisfied: "step_2", // If signal received
+					Timeout:   "step_5", // If timeout occurs
 				},
-				Schema: map[string]interface{}{
+				Schema: map[string]interface{}{ // Schema input validated against node schema
 					"timeout_seconds": int64(30),
 				},
 			},
 			"step_5": {
-				Node: "webhook",
+				Node: "webhook", // Activity task
 				GoTo: "step_6",
 			},
 			"step_6": {
-				Node: "explicity_wait",
+				Node: "explicity_wait", // Workflow task (waiter)
 				GoTo: "step_7",
 			},
 			"step_7": {
-				Node: "send_message",
+				Node: "send_message", // Activity task
+				// Workflow ends here
 			},
 		},
 	}
