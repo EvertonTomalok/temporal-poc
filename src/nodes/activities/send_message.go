@@ -20,7 +20,8 @@ func init() {
 		MaximumInterval:    time.Minute,
 		MaximumAttempts:    15,
 	}
-	RegisterActivity(SendMessageActivityName, SendMessageActivity, retryPolicy)
+	// No schema defined for send_message (no input required)
+	RegisterActivity(SendMessageActivityName, SendMessageActivity, retryPolicy, nil)
 }
 
 // SendMessageActivity sends a message to the client

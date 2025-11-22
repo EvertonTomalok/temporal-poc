@@ -23,8 +23,8 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 					Satisfied: "step_3",
 					Timeout:   "step_4",
 				},
-				Input: &domain.StepInput{
-					TimeoutSeconds: 30,
+				Schema: map[string]interface{}{
+					"timeout_seconds": int64(30),
 				},
 			},
 			"step_3": {

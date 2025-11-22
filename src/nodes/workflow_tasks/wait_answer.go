@@ -7,15 +7,26 @@ import (
 
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
+	"temporal-poc/src/nodes/activities"
 )
 
 var WaitAnswerName = "wait_answer"
 
+type WaitAnswerSchema struct {
+	TimeoutSeconds int64 `json:"timeout_seconds,omitempty" jsonschema:"description=Timeout in seconds (default: 30),default=30"`
+}
+
 func init() {
+	// Define schema struct for wait_answer node
+	// This struct will be converted to JSON Schema for validation
+	schema := &domain.NodeSchema{
+		SchemaStruct: WaitAnswerSchema{},
+	}
+
 	// Register node with container (processor and workflow node)
 	// No retry policy - pass nil for empty retry policy
 	// This is a workflow task because it waits for signals and uses timers
-	RegisterNode(WaitAnswerName, waitAnswerProcessorNode, nil, NodeTypeWorkflowTask)
+	RegisterNode(WaitAnswerName, waitAnswerProcessorNode, nil, NodeTypeWorkflowTask, schema)
 }
 
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout
@@ -24,10 +35,12 @@ func init() {
 func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
 
-	// Get timeout from input, default to 30 seconds if not provided
-	waitAnswerTimeout := 30 * time.Second
-	if activityCtx.Input.TimeoutSeconds > 0 {
-		waitAnswerTimeout = time.Duration(activityCtx.Input.TimeoutSeconds) * time.Second
+	// Get timeout from schema, default to 30 seconds if not provided
+	waitAnswerTimeout := 60 * time.Second
+	if schema, err := activities.UnmarshalSchema[WaitAnswerSchema](activityCtx.Schema); err == nil {
+		if schema.TimeoutSeconds > 0 {
+			waitAnswerTimeout = time.Duration(schema.TimeoutSeconds) * time.Second
+		}
 	}
 
 	// Create channel for client-answered signal

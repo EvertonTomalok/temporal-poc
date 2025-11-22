@@ -81,6 +81,7 @@ type StartWorkflowRequest struct {
 	// Optional: if not provided, a UUID will be generated
 	WorkflowID string `json:"workflow_id,omitempty"`
 	// Optional: if not provided or invalid, default config will be used
+	// Step inputs are validated against node schemas automatically
 	Config *workflows.WorkflowConfig `json:"config,omitempty"`
 }
 
@@ -109,18 +110,23 @@ func startWorkflowHandler(c echo.Context) error {
 	// Get workflow config from request or use default
 	var workflowConfig workflows.WorkflowConfig
 	if req.Config != nil {
-		// Validate the provided config
-		if err := workflows.ValidateWorkflowConfig(*req.Config); err != nil {
-			// If validation fails, log the error and use default
-			log.Printf("Invalid workflow config provided, using default: %v", err)
-			workflowConfig = workflows.BuildDefaultWorkflowDefinition()
-		} else {
-			// Use the provided config if valid
-			workflowConfig = *req.Config
+		// Use the provided config
+		workflowConfig = *req.Config
+
+		// Validate the provided config (includes schema validation for step inputs)
+		if err := workflows.ValidateWorkflowConfig(workflowConfig); err != nil {
+			// If validation fails, return error
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("Invalid workflow config: %v", err),
+			})
 		}
 	} else {
 		// Use default config if not provided
 		workflowConfig = workflows.BuildDefaultWorkflowDefinition()
+		// Validate default config (includes schema validation)
+		if err := workflows.ValidateWorkflowConfig(workflowConfig); err != nil {
+			log.Printf("Warning: Default workflow config validation failed: %v", err)
+		}
 	}
 
 	// Build workflow execution config with the validated config

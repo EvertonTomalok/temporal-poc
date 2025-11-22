@@ -25,10 +25,10 @@ func GenerateAbandonedCartWorkflowID() string {
 
 // StepConfig defines a single step in the dynamic workflow
 type StepConfig struct {
-	Node      string            `json:"node"`                // The node name to execute
-	GoTo      string            `json:"go_to,omitempty"`     // Next step for simple linear flow (optional)
-	Condition *domain.Condition `json:"condition,omitempty"` // Conditional branching based on event types (optional)
-	Input     *domain.StepInput `json:"input,omitempty"`     // Step input parameters (optional)
+	Node      string                 `json:"node"`                // The node name to execute
+	GoTo      string                 `json:"go_to,omitempty"`     // Next step for simple linear flow (optional)
+	Condition *domain.Condition      `json:"condition,omitempty"` // Conditional branching based on event types (optional)
+	Schema    map[string]interface{} `json:"schema,omitempty"`    // Step schema data (validated against node schema)
 }
 
 // WorkflowConfig defines the configuration for the dynamic workflow
@@ -70,7 +70,7 @@ func executeWorkflowNode(
 	workflowID string,
 	startTime time.Time,
 	timeoutDuration time.Duration,
-	input *domain.StepInput,
+	schema map[string]interface{},
 ) (activities.NodeExecutionResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Executing workflow task node", "node_name", nodeName)
@@ -86,7 +86,7 @@ func executeWorkflowNode(
 		WorkflowID:      workflowID,
 		StartTime:       startTime,
 		TimeoutDuration: timeoutDuration,
-		Input:           input,
+		Schema:          schema,
 	}
 
 	result := workflowNode(ctx, activityCtx)
@@ -107,7 +107,7 @@ func executeActivityNode(
 	workflowID string,
 	startTime time.Time,
 	timeoutDuration time.Duration,
-	input *domain.StepInput,
+	schema map[string]interface{},
 ) (activities.NodeExecutionResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Executing activity node", "node_name", nodeName)
@@ -136,7 +136,7 @@ func executeActivityNode(
 		TimeoutDuration: timeoutDuration,
 		EventTime:       workflow.Now(ctx),
 		EventType:       domain.EventTypeConditionSatisfied,
-		Input:           input,
+		Schema:          schema,
 	}
 
 	// Set activity timeout - activities should have reasonable timeouts (max 10 minutes)
@@ -215,9 +215,23 @@ func convertToWorkflowDefinition(config WorkflowConfig) register.WorkflowDefinit
 }
 
 // ValidateWorkflowConfig validates a WorkflowConfig and returns an error if invalid
+// It also validates step inputs against node schemas
 func ValidateWorkflowConfig(config WorkflowConfig) error {
 	definition := convertToWorkflowDefinition(config)
-	return validation.ValidateWorkflowDefinition(definition)
+	if err := validation.ValidateWorkflowDefinition(definition); err != nil {
+		return err
+	}
+
+	// Validate step schemas against node schemas
+	for stepName, stepConfig := range config.Steps {
+		if stepConfig.Schema != nil {
+			if err := validation.ValidateStepInput(stepConfig.Node, stepConfig.Schema); err != nil {
+				return fmt.Errorf("step '%s': %w", stepName, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // executeWorkflowConfig is a helper function that executes a workflow config
@@ -262,15 +276,16 @@ func executeWorkflowConfig(ctx workflow.Context, config WorkflowConfig) error {
 		logger.Info("Executing step", "step", currentStep, "node", stepDef.Node)
 
 		// Execute the node - either as workflow task (waiter) or activity task
+		// Schema is passed directly as map[string]interface{} for agnostic access
 		var result activities.NodeExecutionResult
 		var err error
 
 		if isWorkflowTask(stepDef.Node) {
 			// Execute workflow task directly in workflow (no activity call)
-			result, err = executeWorkflowNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Input)
+			result, err = executeWorkflowNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Schema)
 		} else {
 			// Execute activity task via workflow.ExecuteActivity
-			result, err = executeActivityNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Input)
+			result, err = executeActivityNode(ctx, stepDef.Node, workflowID, startTime, timeoutDuration, stepDef.Schema)
 		}
 
 		if err != nil {

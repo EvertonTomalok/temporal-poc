@@ -19,7 +19,8 @@ func init() {
 		MaximumInterval:    time.Minute,
 		MaximumAttempts:    15,
 	}
-	RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity, retryPolicy)
+	// No schema defined for webhook (no input required)
+	RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity, retryPolicy, nil)
 }
 
 // TimeoutWebhookActivity sends a webhook notification on timeout

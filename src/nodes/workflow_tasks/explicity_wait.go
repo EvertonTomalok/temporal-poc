@@ -13,7 +13,8 @@ func init() {
 	// Register node with container (processor and workflow node)
 	// No retry policy - pass nil for empty retry policy
 	// This is a workflow task because it uses workflow.Sleep for explicit waiting
-	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil, NodeTypeWorkflowTask)
+	// No schema defined for explicity_wait (no input required)
+	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil, NodeTypeWorkflowTask, nil)
 }
 
 // processExplicityWaitNode processes the explicity_wait node

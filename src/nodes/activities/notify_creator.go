@@ -20,7 +20,8 @@ func init() {
 		MaximumInterval:    45 * time.Second,
 		MaximumAttempts:    20,
 	}
-	RegisterActivity(NotifyCreatorActivityName, NotifyCreatorActivity, retryPolicy)
+	// No schema defined for notify_creator (no input required)
+	RegisterActivity(NotifyCreatorActivityName, NotifyCreatorActivity, retryPolicy, nil)
 }
 
 // NotifyCreatorActivity sends a notification to the creator

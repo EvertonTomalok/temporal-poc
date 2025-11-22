@@ -19,7 +19,7 @@ type ActivityContext struct {
 	TimeoutDuration time.Duration
 	EventTime       time.Time
 	EventType       domain.EventType
-	Input           *domain.StepInput // Step input (optional) - can be *domain.StepInput or other types
+	Schema          map[string]interface{} // Step schema data (validated against node schema)
 }
 
 // NodeExecutionResult contains information about the activity to execute
@@ -45,6 +45,7 @@ type ActivityInfo struct {
 	Name        string
 	Function    ActivityFunction
 	RetryPolicy *temporal.RetryPolicy // Retry policy for the activity (nil means no retry)
+	Schema      *domain.NodeSchema    // Input schema for the activity (optional)
 }
 
 // Container holds all registered activities
@@ -71,7 +72,8 @@ func GetContainer() *Container {
 // RegisterActivity registers an activity function with a name and optional retry policy
 // This is called by each activity's init() function
 // If retryPolicy is nil, no retry policy will be applied (empty retry policy)
-func RegisterActivity(name string, fn ActivityFunction, retryPolicy *temporal.RetryPolicy) {
+// If schema is nil, no schema validation will be performed for this activity
+func RegisterActivity(name string, fn ActivityFunction, retryPolicy *temporal.RetryPolicy, schema *domain.NodeSchema) {
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
@@ -79,6 +81,7 @@ func RegisterActivity(name string, fn ActivityFunction, retryPolicy *temporal.Re
 		Name:        name,
 		Function:    fn,
 		RetryPolicy: retryPolicy,
+		Schema:      schema,
 	}
 }
 
@@ -150,4 +153,20 @@ func HasActivity(name string) bool {
 // GetRetryPolicy is a convenience function that returns the retry policy for an activity name
 func GetRetryPolicy(name string) *temporal.RetryPolicy {
 	return GetContainer().GetRetryPolicy(name)
+}
+
+// GetSchema returns the schema for a given activity name
+func (c *Container) GetSchema(name string) (*domain.NodeSchema, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	activityInfo, exists := c.activities[name]
+	if !exists {
+		return nil, false
+	}
+	return activityInfo.Schema, activityInfo.Schema != nil
+}
+
+// GetSchema is a convenience function that returns the schema for an activity name
+func GetSchema(name string) (*domain.NodeSchema, bool) {
+	return GetContainer().GetSchema(name)
 }

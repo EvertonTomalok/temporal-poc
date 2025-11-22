@@ -45,6 +45,7 @@ type NodeInfo struct {
 	Type        workflow_tasks.NodeType // NodeTypeActivity or NodeTypeWorkflowTask
 	Caller      NodeCaller              // Processor for workflow tasks, Function for activities
 	RetryPolicy *temporal.RetryPolicy   // Retry policy (nil means no retry)
+	Schema      *domain.NodeSchema      // Input schema for the node (optional)
 }
 
 // Register is a singleton that provides unified access to all nodes

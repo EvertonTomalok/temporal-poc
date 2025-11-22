@@ -5,6 +5,17 @@ type StepInput struct {
 	TimeoutSeconds int64 `json:"timeout_seconds,omitempty"` // Timeout in seconds (optional)
 }
 
+// NodeSchema defines the input schema for a node
+// SchemaStruct is a Go struct that represents the input schema
+// It will be converted to JSON Schema for validation
+type NodeSchema struct {
+	SchemaStruct interface{} `json:"-"` // Go struct representing the schema (not serialized)
+}
+
+// SchemaData represents the actual data provided for nodes in a workflow
+// Key is the node name, value is a map of field names to their values
+type SchemaData map[string]map[string]interface{}
+
 // Condition defines conditional branching with condition evaluation and multiple outcomes
 type Condition struct {
 	Condition    string `json:"condition,omitempty"`     // The condition to evaluate
