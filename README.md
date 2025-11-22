@@ -1735,7 +1735,7 @@ Start a new workflow execution.
 **Response**:
 ```json
 {
-  "workflow_id": "abandoned_cart-abc123",
+  "workflow_id": "recovery_cart-abc123",
   "run_id": "xyz789",
   "message": "Workflow started successfully"
 }
@@ -1750,7 +1750,7 @@ Send a signal to a running workflow.
 **Request Body**:
 ```json
 {
-  "workflow_id": "abandoned_cart-abc123",
+  "workflow_id": "recovery_cart-abc123",
   "run_id": "optional-run-id",
   "signal_name": "client-answered"
 }
@@ -1759,7 +1759,7 @@ Send a signal to a running workflow.
 **Response**:
 ```json
 {
-  "message": "Successfully sent 'client-answered' signal to workflow: abandoned_cart-abc123"
+  "message": "Successfully sent 'client-answered' signal to workflow: recovery_cart-abc123"
 }
 ```
 

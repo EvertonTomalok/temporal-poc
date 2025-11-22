@@ -109,7 +109,7 @@ func startWorkflowHandler(c echo.Context) error {
 	// Generate workflow ID if not provided
 	workflowID := req.WorkflowID
 	if workflowID == "" {
-		workflowID = workflows.GenerateAbandonedCartWorkflowID()
+		workflowID = workflows.GenerateWorkflowID()
 	}
 
 	// Get workflow config from request or use default

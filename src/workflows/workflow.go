@@ -17,10 +17,10 @@ import (
 	"temporal-poc/src/validation"
 )
 
-var AbandonedCartWorkflowName = "abandoned_cart"
+var WorkflowName = "workflow"
 
-func GenerateAbandonedCartWorkflowID() string {
-	return fmt.Sprintf("%s-%s", AbandonedCartWorkflowName, uuid.New().String())
+func GenerateWorkflowID() string {
+	return fmt.Sprintf("%s-%s", WorkflowName, uuid.New().String())
 }
 
 // StepConfig defines a single step in the dynamic workflow

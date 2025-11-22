@@ -39,11 +39,7 @@ func DynamicActivity(ctx context.Context, args converter.EncodedValues) (activit
 	reg := register.GetInstance()
 	activityFn, exists := reg.GetActivityFunction(activityName)
 	if !exists {
-		// If it's not an activity, it might be a workflow task - use placeholder
-		logger.Info("Activity not found in register, using placeholder", "ActivityName", activityName)
-		// This is a placeholder for UI display only.
-		// The actual processor is called from the workflow node in workflows/workflow.go.
-		return activities.ActivityResult{}, nil
+		return activities.ActivityResult{}, fmt.Errorf("activity not found in register: %s", activityName)
 	}
 
 	// Execute the activity function
