@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/register"
 	"temporal-poc/src/validation"
 	workflows "temporal-poc/src/workflows"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -68,16 +72,49 @@ func main() {
 	e.POST("/start-workflow", startWorkflowHandler)
 	e.POST("/send-signal", sendSignalHandler)
 
-	// Start server
-	port := ":8081"
-	log.Printf("Server starting on port %s\n", port)
-	log.Println("Endpoints:")
-	log.Println("  GET  /nodes - Get all available nodes with schemas")
-	log.Println("  POST /start-workflow - Start a new workflow")
-	log.Println("  POST /send-signal - Send a signal to a workflow")
+	// Set up graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	if err := e.Start(port); err != nil && err != http.ErrServerClosed {
-		log.Fatalln("Server failed to start", err)
+	// Start server in a goroutine
+	port := ":8081"
+	serverErrChan := make(chan error, 1)
+	go func() {
+		log.Printf("Server starting on port %s\n", port)
+		log.Println("Endpoints:")
+		log.Println("  GET  /nodes - Get all available nodes with schemas")
+		log.Println("  POST /start-workflow - Start a new workflow")
+		log.Println("  POST /send-signal - Send a signal to a workflow")
+		if err := e.Start(port); err != nil && err != http.ErrServerClosed {
+			serverErrChan <- err
+		}
+	}()
+
+	// Wait for interrupt signal or server error
+	select {
+	case sig := <-sigChan:
+		log.Printf("Received signal: %v. Initiating graceful shutdown...", sig)
+
+		// Create a context with timeout for graceful shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Shutdown the server gracefully
+		if err := e.Shutdown(ctx); err != nil {
+			log.Printf("Error during server shutdown: %v", err)
+		} else {
+			log.Println("Server stopped gracefully")
+		}
+
+		// Close Temporal client
+		if temporalClient != nil {
+			temporalClient.Close()
+			log.Println("Temporal client closed")
+		}
+	case err := <-serverErrChan:
+		if err != nil {
+			log.Fatalln("Server failed to start", err)
+		}
 	}
 }
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/nodes/activities"
@@ -107,10 +110,32 @@ func main() {
 		log.Printf("Registering node: %s", nodeName)
 	}
 
-	// Start worker
-	log.Println("Worker started, listening on task queue: primary-workflow-task-queue")
-	err = w.Run(worker.InterruptCh())
-	if err != nil {
-		log.Fatalln("Unable to start worker", err)
+	// Set up graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Start worker in a goroutine
+	workerErrChan := make(chan error, 1)
+	go func() {
+		log.Println("Worker started, listening on task queue: primary-workflow-task-queue")
+		// Pass nil to Run() so we handle signals ourselves
+		err := w.Run(worker.InterruptCh())
+		workerErrChan <- err
+	}()
+
+	// Wait for interrupt signal or worker error
+	select {
+	case sig := <-sigChan:
+		log.Printf("Received signal: %v. Initiating graceful shutdown...", sig)
+		w.Stop()
+		log.Println("Worker stopped gracefully")
+		// Wait for worker to finish
+		if err := <-workerErrChan; err != nil {
+			log.Printf("Worker error during shutdown: %v", err)
+		}
+	case err := <-workerErrChan:
+		if err != nil {
+			log.Fatalln("Unable to start worker", err)
+		}
 	}
 }
