@@ -121,7 +121,10 @@ curl -X POST http://localhost:8081/start-workflow \
         },
         "step_6": {
           "node": "explicity_wait",
-          "go_to": "step_7"
+          "go_to": "step_7",
+          "schema": {
+            "wait_seconds": 15
+          }
         },
         "step_7": {
           "node": "send_message"
@@ -426,6 +429,9 @@ config := workflows.WorkflowConfig{
         "step_6": {
             Node: "explicity_wait",  // Workflow task (waiter)
             GoTo: "step_7",
+            Schema: map[string]interface{}{ // Schema input validated against node schema
+                "wait_seconds": int64(15),
+            },
         },
         "step_7": {
             Node: "send_message",  // Activity task
@@ -746,6 +752,56 @@ func timeoutWebhookProcessorNode(ctx workflow.Context, activityCtx ActivityConte
     // Process timeout scenario
     // May trigger webhook call
     // Return event type
+}
+```
+
+#### 4. Explicity Wait Node
+
+---
+
+A simple workflow task node that waits for a configurable duration:
+
+```go
+func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+    // Get wait duration from schema
+    waitDuration := 15 * time.Second
+    if schema, err := helpers.UnmarshalSchema[ExplicityWaitSchema](activityCtx.Schema); err == nil {
+        if schema.WaitSeconds > 0 {
+            waitDuration = time.Duration(schema.WaitSeconds) * time.Second
+        }
+    }
+    
+    // Use workflow.Sleep for deterministic waiting
+    workflow.Sleep(ctx, waitDuration)
+    
+    return NodeExecutionResult{
+        EventType: condition_satisfied,
+    }
+}
+```
+
+**Schema**:
+```go
+type ExplicityWaitSchema struct {
+    WaitSeconds int64 `json:"wait_seconds" jsonschema:"description=Wait in seconds,required"`
+}
+```
+
+**Characteristics**:
+- Uses `workflow.Sleep` for deterministic waiting
+- Configurable wait duration via schema input
+- Defaults to 15 seconds if schema not provided
+- Always returns `condition_satisfied` after waiting
+- Must be deterministic (no external calls)
+
+**Usage in workflow**:
+```go
+"step_6": {
+    Node: "explicity_wait",
+    GoTo: "step_7",
+    Schema: map[string]interface{}{
+        "wait_seconds": int64(15),
+    },
 }
 ```
 
@@ -1393,6 +1449,9 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
             "step_6": {
                 Node: "explicity_wait",
                 GoTo: "step_7",
+                Schema: map[string]interface{}{
+                    "wait_seconds": int64(15),
+                },
             },
             "step_7": {
                 Node: "send_message",

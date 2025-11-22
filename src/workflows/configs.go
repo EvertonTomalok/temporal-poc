@@ -47,6 +47,9 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 			"step_6": {
 				Node: "explicity_wait", // Workflow task (waiter)
 				GoTo: "step_7",
+				Schema: map[string]interface{}{ // Schema input validated against node schema
+					"wait_seconds": int64(15),
+				},
 			},
 			"step_7": {
 				Node: "send_message", // Activity task

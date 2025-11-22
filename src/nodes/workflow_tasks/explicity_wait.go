@@ -2,6 +2,7 @@ package workflow_tasks
 
 import (
 	"temporal-poc/src/core/domain"
+	"temporal-poc/src/helpers"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -9,12 +10,15 @@ import (
 
 var ExplicitWaitName = "explicity_wait"
 
+type ExplicityWaitSchema struct {
+	WaitSeconds int64 `json:"wait_seconds" jsonschema:"description=Wait in seconds,required"`
+}
+
 func init() {
-	// Register node with container (processor and workflow node)
-	// No retry policy - pass nil for empty retry policy
-	// This is a workflow task because it uses workflow.Sleep for explicit waiting
-	// No schema defined for explicity_wait (no input required)
-	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil, NodeTypeWorkflowTask, nil)
+	explicity_wait_schema := &domain.NodeSchema{
+		SchemaStruct: ExplicityWaitSchema{},
+	}
+	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil, NodeTypeWorkflowTask, explicity_wait_schema)
 }
 
 // processExplicityWaitNode processes the explicity_wait node
@@ -23,13 +27,19 @@ func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext)
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Processing explicity_wait node", "workflow_id", activityCtx.WorkflowID)
 
-	// TODO: Remove this once we have a proper timeout duration
-	timeoutDuration := 15 * time.Second
-	logger.Info("Sleeping before completion", "duration", timeoutDuration)
+	// Get wait duration from schema, default to 15 seconds if not provided
+	waitDuration := 15 * time.Second
+	if schema, err := helpers.UnmarshalSchema[ExplicityWaitSchema](activityCtx.Schema); err == nil {
+		if schema.WaitSeconds > 0 {
+			waitDuration = time.Duration(schema.WaitSeconds) * time.Second
+		}
+	}
+
+	logger.Info("Sleeping before completion", "duration", waitDuration)
 
 	// Use workflow.Sleep instead of time.After for determinism - this yields to Temporal runtime
 	// workflow.Sleep respects context cancellation and ensures determinism across replays
-	workflow.Sleep(ctx, timeoutDuration)
+	workflow.Sleep(ctx, waitDuration)
 	// Sleep completed normally
 	logger.Info("Explicity wait node processed successfully")
 	return NodeExecutionResult{
