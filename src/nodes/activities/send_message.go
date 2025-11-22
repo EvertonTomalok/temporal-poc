@@ -26,7 +26,7 @@ func init() {
 
 // SendMessageActivity sends a message to the client
 // This is a real Temporal activity that will be retried on failure
-func SendMessageActivity(ctx context.Context, activityCtx ActivityContext) error {
+func SendMessageActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("SendMessageActivity executing", "workflow_id", activityCtx.WorkflowID)
 
@@ -39,7 +39,7 @@ func SendMessageActivity(ctx context.Context, activityCtx ActivityContext) error
 	percentFailure := rand.Intn(100)
 	if attempt <= 2 && percentFailure < 50 {
 		logger.Error("SEND MESSAGE: attempt failed (simulated failure)", "attempt", attempt)
-		return temporal.NewApplicationError(
+		return ActivityResult{}, temporal.NewApplicationError(
 			fmt.Sprintf("simulated failure on attempt %d", int(attempt)),
 			"RetryableError",
 		)
@@ -55,5 +55,5 @@ func SendMessageActivity(ctx context.Context, activityCtx ActivityContext) error
 	logger.Info("MESSAGE RESPONSE: 200 OK")
 	logger.Info("SendMessageActivity completed successfully")
 
-	return nil
+	return ActivityResult{}, nil
 }

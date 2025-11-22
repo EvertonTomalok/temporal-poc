@@ -27,16 +27,17 @@ func init() {
 // NotifyCreatorActivity sends a notification to the creator
 // This is a real Temporal activity that will be retried on failure
 // First attempt fails to demonstrate retry behavior
-func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext) error {
+func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
 	logger := activity.GetLogger(ctx)
 
 	// Get attempt number from activity info
 	info := activity.GetInfo(ctx)
 	attempt := int(info.Attempt)
 	// Fail on attempts up to MaxAttemptsToFail to demonstrate retry behavior
+	// Return error to trigger retries
 	if attempt <= 3 {
 		logger.Error("NOTIFY CREATOR: attempt failed (simulated failure)", "attempt", attempt)
-		return temporal.NewApplicationError(
+		return ActivityResult{}, temporal.NewApplicationError(
 			fmt.Sprintf("simulated failure on attempt %d", attempt),
 			"RetryableError",
 		)
@@ -49,8 +50,8 @@ func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext) err
 	// In that case, we should skip the notification
 	if !activityCtx.ClientAnswered || activityCtx.EventType != domain.EventTypeConditionSatisfied {
 		logger.Info("Skipping notify creator - client did not answer (timeout occurred)")
-		// Return nil to indicate success (we're skipping, not failing)
-		return nil
+		// Return success (we're skipping, not failing)
+		return ActivityResult{}, nil
 	}
 
 	// Simulate notifying the creator
@@ -63,5 +64,5 @@ func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext) err
 	logger.Info("NOTIFY CREATOR RESPONSE: 200 OK")
 	logger.Info("NotifyCreatorActivity completed successfully", "attempt", attempt)
 
-	return nil
+	return ActivityResult{}, nil
 }

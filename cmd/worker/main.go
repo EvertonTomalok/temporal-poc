@@ -21,7 +21,7 @@ import (
 // DynamicActivity handles all activity executions dynamically by reading from the register
 // It routes to the appropriate activity function based on the activity name
 // Uses converter.EncodedValues to accept dynamic arguments from the workflow
-func DynamicActivity(ctx context.Context, args converter.EncodedValues) error {
+func DynamicActivity(ctx context.Context, args converter.EncodedValues) (activities.ActivityResult, error) {
 	info := activity.GetInfo(ctx)
 	activityName := info.ActivityType.Name
 
@@ -32,7 +32,7 @@ func DynamicActivity(ctx context.Context, args converter.EncodedValues) error {
 	var activityCtx activities.ActivityContext
 	if err := args.Get(&activityCtx); err != nil {
 		logger.Error("Failed to decode ActivityContext", "error", err)
-		return fmt.Errorf("failed to decode ActivityContext: %w", err)
+		return activities.ActivityResult{}, fmt.Errorf("failed to decode ActivityContext: %w", err)
 	}
 
 	// Get the activity function from the register
@@ -43,12 +43,17 @@ func DynamicActivity(ctx context.Context, args converter.EncodedValues) error {
 		logger.Info("Activity not found in register, using placeholder", "ActivityName", activityName)
 		// This is a placeholder for UI display only.
 		// The actual processor is called from the workflow node in workflows/workflow.go.
-		return nil
+		return activities.ActivityResult{}, nil
 	}
 
 	// Execute the activity function
 	logger.Info("Executing activity from register", "ActivityName", activityName)
-	return activityFn(ctx, activityCtx)
+	result, err := activityFn(ctx, activityCtx)
+	if err != nil {
+		// Return error to trigger retries
+		return result, err
+	}
+	return result, nil
 }
 
 func main() {

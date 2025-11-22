@@ -36,9 +36,18 @@ type NodeExecutionResult struct {
 // This is used by workflow nodes (processors) that run in workflow context
 type ActivityProcessor func(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult
 
+// ActivityResult contains the result of an activity execution
+// Activities can return an event type to control workflow flow
+type ActivityResult struct {
+	Metadata  map[string]interface{} // Metadata for future use (optional, can be nil)
+	EventType domain.EventType       // Event type to control workflow flow (optional, defaults to condition_satisfied)
+}
+
 // ActivityFunction is the type signature for all activity functions
 // This is used by actual Temporal activities that run in activity context
-type ActivityFunction func(ctx context.Context, activityCtx ActivityContext) error
+// Activities can return an ActivityResult with an event type to control workflow flow
+// Return an error to trigger retries (retryable errors), or return nil with ActivityResult.Error set for non-retryable errors
+type ActivityFunction func(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error)
 
 // ActivityInfo holds information about a registered activity
 type ActivityInfo struct {

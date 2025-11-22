@@ -92,27 +92,37 @@ curl -X POST http://localhost:8081/start-workflow \
           "go_to": "step_2"
         },
         "step_2": {
-          "node": "wait_answer",
+          "node": "bought_any_offer",
           "condition": {
             "satisfied": "step_3",
-            "timeout": "step_4"
+            "not_satisfied": "step_4"
           },
           "schema": {
-            "timeout_seconds": 30
+            "last_minutes": 60
           }
         },
         "step_3": {
           "node": "notify_creator"
         },
         "step_4": {
-          "node": "webhook",
-          "go_to": "step_5"
+          "node": "wait_answer",
+          "condition": {
+            "satisfied": "step_3",
+            "timeout": "step_5"
+          },
+          "schema": {
+            "timeout_seconds": 30
+          }
         },
         "step_5": {
-          "node": "explicity_wait",
+          "node": "webhook",
           "go_to": "step_6"
         },
         "step_6": {
+          "node": "explicity_wait",
+          "go_to": "step_7"
+        },
+        "step_7": {
           "node": "send_message"
         }
       }
@@ -257,7 +267,8 @@ The system distinguishes between two types of nodes:
    - Can perform non-deterministic operations
    - Can make external API calls
    - Execute asynchronously via `workflow.ExecuteActivity`
-   - Examples: `send_message`, `notify_creator`, `webhook`
+   - Can return event types to control workflow flow
+   - Examples: `send_message`, `notify_creator`, `webhook`, `bought_any_offer`
 
 The system automatically determines the execution method based on how the node is registered.
 
@@ -331,6 +342,27 @@ const (
 )
 ```
 
+**Activity Event Types**: Activities can return event types to control workflow flow by returning an `ActivityResult`:
+
+```go
+type ActivityResult struct {
+    Metadata  map[string]interface{} // Metadata for future use (optional, can be nil)
+    EventType domain.EventType       // Event type to control workflow flow (ConditionSatified, ConditionNotSatified, Timeout)
+}
+
+// Activity functions return (ActivityResult, error) to support retries
+type ActivityFunction func(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error)
+```
+
+When an activity returns an `ActivityResult` with an `EventType`, the workflow uses that event type to determine the next step based on the step's `Condition`. If no event type is specified, it defaults to `condition_satisfied`.
+
+**Important**: Activities return `(ActivityResult, error)` where:
+- Returning an `error` triggers Temporal retries (for retryable failures)
+- Returning `(ActivityResult{...}, nil)` indicates success with optional event type
+- The `Metadata` field can be used to pass additional information back to the workflow
+
+**Example**: The `bought_any_offer` activity uses random probability (20% chance) to return `condition_satisfied` if an offer is found, or `condition_not_satisfied` (80% chance) if no offer is found, allowing the workflow to branch accordingly.
+
 #### 4. Conditions
 
 ---
@@ -364,13 +396,13 @@ config := workflows.WorkflowConfig{
             GoTo: "step_2",        // Linear flow
         },
         "step_2": {
-            Node: "wait_answer",   // Workflow task (waiter)
+            Node: "bought_any_offer",  // Activity task with conditional branching
             Condition: &domain.Condition{
-                Satisfied: "step_3",  // If signal received
-                Timeout:   "step_4",  // If timeout occurs
+                Satisfied:    "step_3",  // If offer found (condition_satisfied)
+                NotSatisfied: "step_4",  // If no offer found (condition_not_satisfied)
             },
             Schema: map[string]interface{}{  // Schema input validated against node schema
-                "timeout_seconds": int64(30),
+                "last_minutes": int64(60),
             },
         },
         "step_3": {
@@ -378,14 +410,24 @@ config := workflows.WorkflowConfig{
             // No GoTo or Condition = workflow ends
         },
         "step_4": {
-            Node: "webhook",  // Activity task
-            GoTo: "step_5",
+            Node: "wait_answer",   // Workflow task (waiter)
+            Condition: &domain.Condition{
+                Satisfied: "step_3",  // If signal received
+                Timeout:   "step_5",  // If timeout occurs
+            },
+            Schema: map[string]interface{}{  // Schema input validated against node schema
+                "timeout_seconds": int64(30),
+            },
         },
         "step_5": {
-            Node: "explicity_wait",  // Workflow task (waiter)
+            Node: "webhook",  // Activity task
             GoTo: "step_6",
         },
         "step_6": {
+            Node: "explicity_wait",  // Workflow task (waiter)
+            GoTo: "step_7",
+        },
+        "step_7": {
             Node: "send_message",  // Activity task
             // Workflow ends here
         },
@@ -406,13 +448,15 @@ config := workflows.WorkflowConfig{
 ```mermaid
 flowchart TD
     Start([Start]) --> step1[step_1<br/>send_message]
-    step1 --> step2[step_2<br/>wait_answer]
-    step2 -->|Signal Received<br/>condition_satisfied| step3[step_3<br/>notify_creator]
-    step2 -->|Timeout<br/>condition_timeout| step4[step_4<br/>webhook]
+    step1 --> step2[step_2<br/>bought_any_offer]
+    step2 -->|Offer Found<br/>condition_satisfied| step3[step_3<br/>notify_creator]
+    step2 -->|No Offer<br/>condition_not_satisfied| step4[step_4<br/>wait_answer]
     step3 --> End1([End])
-    step4 --> step5[step_5<br/>explicity_wait]
-    step5 --> step6[step_6<br/>send_message]
-    step6 --> End2([End])
+    step4 -->|Signal Received<br/>condition_satisfied| step3
+    step4 -->|Timeout<br/>condition_timeout| step5[step_5<br/>webhook]
+    step5 --> step6[step_6<br/>explicity_wait]
+    step6 --> step7[step_7<br/>send_message]
+    step7 --> End2([End])
 ```
 
 #### Flow Execution
@@ -421,15 +465,20 @@ flowchart TD
 
 1. **Start**: Workflow begins at `step_1` (defined by `StartStep`)
 2. **Step 1**: Executes `send_message` node, then goes to `step_2` (via `GoTo`)
-3. **Step 2**: Executes `wait_answer` node, which:
+3. **Step 2**: Executes `bought_any_offer` activity, which:
+   - Checks if user bought any offer in the last N minutes (fake database call with random probability)
+   - Uses random probability: 20% chance of `condition_satisfied` (offer found), 80% chance of `condition_not_satisfied` (no offer found)
+   - Returns event type based on random result
+   - Based on event type, goes to either `step_3` (notify creator) or `step_4` (wait answer)
+4. **Step 3** (if offer found): Executes `notify_creator` node, workflow ends
+5. **Step 4** (if no offer found): Executes `wait_answer` node, which:
    - Waits for "client-answered" signal OR
-   - Waits for timeout (1 minute)
+   - Waits for timeout (30 seconds)
    - Returns `condition_satisfied` or `condition_timeout` event type
-   - Based on event type, goes to either `step_3` or `step_4` (via `Condition`)
-4. **Step 3** (if signal received): Executes `notify_creator` node, workflow ends
-5. **Step 4** (if timeout): Executes `webhook` node, then goes to `step_5`
-6. **Step 5**: Executes `explicity_wait` node, then goes to `step_6`
-7. **Step 6**: Executes `send_message` node, workflow ends
+   - Based on event type, goes to either `step_3` (notify creator) or `step_5` (webhook)
+6. **Step 5** (if timeout): Executes `webhook` node, then goes to `step_6`
+7. **Step 6**: Executes `explicity_wait` node, then goes to `step_7`
+8. **Step 7**: Executes `send_message` node, workflow ends
 
 #### Conditional Branching Logic
 
@@ -733,7 +782,14 @@ The system includes **schema validation** that allows nodes to define input sche
 
 ---
 
-Nodes can define input schemas using Go structs that are automatically converted to JSON Schema for validation:
+Nodes can define input schemas using Go structs that are automatically converted to JSON Schema for validation. The system uses **JSON Schema tags** (`jsonschema`) to define validation rules, descriptions, and constraints.
+
+**JSON Schema Documentation**:
+- **JSON Schema Specification**: https://json-schema.org/
+- **invopop/jsonschema** (Go struct to JSON Schema converter): https://github.com/invopop/jsonschema
+- **santhosh-tekuri/jsonschema/v5** (JSON Schema validator): https://github.com/santhosh-tekuri/jsonschema
+
+##### Basic Schema Definition
 
 ```go
 // Define schema struct
@@ -749,6 +805,137 @@ func init() {
     RegisterNode(WaitAnswerName, waitAnswerProcessorNode, nil, NodeTypeWorkflowTask, schema)
 }
 ```
+
+##### JSON Schema Tag Options
+
+The `jsonschema` tag supports various options to define validation rules. Multiple options are separated by commas:
+
+**Common Options**:
+- `required` - Field is required (must be provided)
+- `description=<text>` - Human-readable description of the field
+- `minimum=<number>` - Minimum value for numeric types
+- `maximum=<number>` - Maximum value for numeric types
+- `minLength=<number>` - Minimum length for strings
+- `maxLength=<number>` - Maximum length for strings
+- `pattern=<regex>` - Regular expression pattern for strings
+- `enum=<value1,value2,...>` - Enumeration of allowed values
+- `default=<value>` - Default value if not provided
+
+##### Complete Examples
+
+**Example 1: Numeric Field with Minimum Value**
+
+```go
+// bought_any_offer activity schema
+type BoughtAnyOfferSchema struct {
+    LastMinutes int64 `json:"last_minutes" jsonschema:"description=Number of minutes to check,required,minimum=0"`
+}
+```
+
+This schema:
+- Requires `last_minutes` to be provided
+- Ensures the value is 0 or greater
+- Provides a description for documentation
+
+**Example 2: String Field with Length Constraints**
+
+```go
+type MessageSchema struct {
+    Message string `json:"message" jsonschema:"description=Message to send,required,minLength=1,maxLength=500"`
+}
+```
+
+**Example 3: Enum Field**
+
+```go
+type StatusSchema struct {
+    Status string `json:"status" jsonschema:"description=Current status,required,enum=active,inactive,pending"`
+}
+```
+
+**Example 4: Multiple Fields with Different Types**
+
+```go
+type CompleteSchema struct {
+    // Required integer with minimum
+    TimeoutSeconds int64 `json:"timeout_seconds" jsonschema:"description=Timeout in seconds,required,minimum=1,maximum=3600"`
+    
+    // Optional string with pattern
+    Email string `json:"email,omitempty" jsonschema:"description=Email address,pattern=^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"`
+    
+    // Required string with length constraints
+    Name string `json:"name" jsonschema:"description=Name of the item,required,minLength=1,maxLength=100"`
+    
+    // Optional boolean with default
+    Enabled bool `json:"enabled,omitempty" jsonschema:"description=Whether the feature is enabled,default=true"`
+}
+```
+
+**Example 5: Real-World Example from bought_any_offer**
+
+```go
+// BoughtAnyOfferSchema defines the input schema for bought_any_offer activity
+type BoughtAnyOfferSchema struct {
+    LastMinutes int64 `json:"last_minutes" jsonschema:"description=Number of minutes to check,required,minimum=0"` // Required: number of minutes to check
+}
+
+func init() {
+    // Define schema for validation
+    schema := &domain.NodeSchema{
+        SchemaStruct: BoughtAnyOfferSchema{},
+    }
+    
+    RegisterActivity(BoughtAnyOfferActivityName, BoughtAnyOfferActivity, retryPolicy, schema)
+}
+
+// Activity function returns (ActivityResult, error) for retry support
+func BoughtAnyOfferActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
+    // ... validation and database query logic ...
+    
+    // Use random probability: 20% satisfied, 80% not satisfied
+    randomValue := rand.Intn(101) // Random number from 0 to 100
+    offerFound := randomValue < 20 // 20% chance (0-19 = satisfied)
+    
+    if offerFound {
+        return ActivityResult{
+            EventType: domain.EventTypeConditionSatisfied,
+        }, nil
+    }
+    
+    return ActivityResult{
+        EventType: domain.EventTypeConditionNotSatisfied,
+    }, nil
+}
+```
+
+**Usage in workflow**:
+```go
+"step_2": {
+    Node: "bought_any_offer",
+    Condition: &domain.Condition{
+        Satisfied:    "step_3",    // 20% chance - notify creator
+        NotSatisfied: "step_4",    // 80% chance - wait answer
+    },
+    Schema: map[string]interface{}{
+        "last_minutes": int64(60), // Must be >= 0, validated automatically
+    },
+}
+```
+
+##### JSON Schema Tag Syntax
+
+The `jsonschema` tag uses comma-separated key-value pairs:
+
+```
+jsonschema:"key1=value1,key2=value2,key3=value3"
+```
+
+**Important Notes**:
+- Values with spaces should not be quoted (the parser handles them)
+- Special characters in regex patterns may need escaping
+- Boolean values (`required`) don't need a value, just the keyword
+- Numeric constraints (`minimum`, `maximum`) work with `int`, `int64`, `float32`, `float64`
+- String constraints (`minLength`, `maxLength`, `pattern`) work with `string` types
 
 #### Step Schema Input
 
@@ -773,9 +960,28 @@ Steps can provide input data that is validated against the node's schema:
 
 ---
 
-1. **Schema Conversion**: Go structs are converted to JSON Schema using `invopop/jsonschema`
-2. **Input Validation**: Step input is validated against JSON Schema using `santhosh-tekuri/jsonschema/v5`
+The schema validation process uses industry-standard JSON Schema:
+
+1. **Schema Conversion**: Go structs are converted to JSON Schema using [`invopop/jsonschema`](https://github.com/invopop/jsonschema)
+   - Reflects Go struct tags to generate JSON Schema
+   - Supports `jsonschema` tags for validation rules
+   - Converts struct types to JSON Schema types automatically
+
+2. **Input Validation**: Step input is validated against JSON Schema using [`santhosh-tekuri/jsonschema/v5`](https://github.com/santhosh-tekuri/jsonschema)
+   - Validates data against JSON Schema Draft 7 specification
+   - Provides detailed error messages for validation failures
+   - Supports all standard JSON Schema constraints
+
 3. **Error Reporting**: Validation errors include node name and specific field errors
+   - Errors are returned before workflow execution
+   - Includes field path and validation reason
+   - Prevents invalid workflows from starting
+
+**JSON Schema Resources**:
+- **JSON Schema Specification**: https://json-schema.org/
+- **JSON Schema Understanding**: https://json-schema.org/understanding-json-schema/
+- **invopop/jsonschema Documentation**: https://github.com/invopop/jsonschema
+- **santhosh-tekuri/jsonschema Documentation**: https://github.com/santhosh-tekuri/jsonschema
 
 ```go
 // Validate step schema against node schema
@@ -944,7 +1150,8 @@ temporal-poc/
 │   │   │   ├── container.go      # Activity container/registry
 │   │   │   ├── send_message.go
 │   │   │   ├── notify_creator.go
-│   │   │   └── timeout_webhook.go
+│   │   │   ├── timeout_webhook.go
+│   │   │   └── bought_any_offer.go
 │   │   └── workflow_tasks/  # Workflow task implementations
 │   │       ├── container.go      # Workflow task container/registry
 │   │       ├── wait_answer.go
@@ -1100,7 +1307,7 @@ func init() {
     RegisterActivity(MyNewActivityName, myNewActivityFunction, retryPolicy, schema)
 }
 
-func myNewActivityFunction(ctx context.Context, activityCtx ActivityContext) error {
+func myNewActivityFunction(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
     // Unmarshal schema if needed
     schema, _ := helpers.UnmarshalSchema[MyNewActivitySchema](activityCtx.Schema)
     
@@ -1108,7 +1315,17 @@ func myNewActivityFunction(ctx context.Context, activityCtx ActivityContext) err
     // Can make external API calls, database operations, etc.
     // Can be non-deterministic
     
-    return nil
+    // For retryable errors, return an error to trigger Temporal retries
+    // if err != nil {
+    //     return ActivityResult{}, temporal.NewApplicationError("error message", "ErrorType")
+    // }
+    
+    // Return ActivityResult with optional event type for conditional branching
+    // If no event type is specified, defaults to condition_satisfied
+    return ActivityResult{
+        Metadata:  nil, // Optional: can pass additional data here
+        EventType: domain.EventTypeConditionSatisfied, // Optional: control workflow flow
+    }, nil
 }
 ```
 
@@ -1146,16 +1363,39 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
                 GoTo: "step_2",
             },
             "step_2": {
+                Node: "bought_any_offer",
+                Condition: &domain.Condition{
+                    Satisfied:    "step_3",
+                    NotSatisfied: "step_4",
+                },
+                Schema: map[string]interface{}{
+                    "last_minutes": int64(60),
+                },
+            },
+            "step_3": {
+                Node: "notify_creator",
+            },
+            "step_4": {
                 Node: "wait_answer",
                 Condition: &domain.Condition{
                     Satisfied: "step_3",
-                    Timeout:   "step_4",
+                    Timeout:   "step_5",
                 },
                 Schema: map[string]interface{}{
                     "timeout_seconds": int64(30),
                 },
             },
-            // ... more steps
+            "step_5": {
+                Node: "webhook",
+                GoTo: "step_6",
+            },
+            "step_6": {
+                Node: "explicity_wait",
+                GoTo: "step_7",
+            },
+            "step_7": {
+                Node: "send_message",
+            },
         },
     }
 }

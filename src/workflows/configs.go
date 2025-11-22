@@ -18,27 +18,37 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 				GoTo: "step_2",
 			},
 			"step_2": {
-				Node: "wait_answer",
+				Node: "bought_any_offer",
 				Condition: &domain.Condition{
-					Satisfied: "step_3",
-					Timeout:   "step_4",
+					Satisfied:    "step_3", // Notify creator if condition satisfied
+					NotSatisfied: "step_4", // Move to step 4 (old step 2 - wait_answer) if not satisfied
 				},
 				Schema: map[string]interface{}{
-					"timeout_seconds": int64(30),
+					"last_minutes": int64(60), // Example: check last 60 minutes
 				},
 			},
 			"step_3": {
 				Node: "notify_creator",
 			},
 			"step_4": {
-				Node: "webhook",
-				GoTo: "step_5",
+				Node: "wait_answer",
+				Condition: &domain.Condition{
+					Satisfied: "step_3",
+					Timeout:   "step_5",
+				},
+				Schema: map[string]interface{}{
+					"timeout_seconds": int64(30),
+				},
 			},
 			"step_5": {
-				Node: "explicity_wait",
+				Node: "webhook",
 				GoTo: "step_6",
 			},
 			"step_6": {
+				Node: "explicity_wait",
+				GoTo: "step_7",
+			},
+			"step_7": {
 				Node: "send_message",
 			},
 		},

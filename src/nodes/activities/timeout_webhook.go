@@ -25,7 +25,7 @@ func init() {
 
 // TimeoutWebhookActivity sends a webhook notification on timeout
 // This is a real Temporal activity that will be retried on failure
-func TimeoutWebhookActivity(ctx context.Context, activityCtx ActivityContext) error {
+func TimeoutWebhookActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("TimeoutWebhookActivity executing", "workflow_id", activityCtx.WorkflowID)
 
@@ -41,5 +41,5 @@ func TimeoutWebhookActivity(ctx context.Context, activityCtx ActivityContext) er
 	logger.Info("WebhookWorkflowNode: Processing completed")
 	logger.Info("TimeoutWebhookActivity completed successfully")
 
-	return nil
+	return ActivityResult{}, nil
 }

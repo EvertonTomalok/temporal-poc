@@ -176,10 +176,11 @@ func executeActivityNode(
 
 	// Execute activity using node name as the activity name
 	// The activity function is registered in the worker and will be called by Temporal
-	var activityResult error
+	var activityResult activities.ActivityResult
 	err := workflow.ExecuteActivity(activityCtxWithOptions, nodeName, activityCtx).Get(ctx, &activityResult)
 	if err != nil {
 		logger.Error("Activity execution failed", "node_name", nodeName, "error", err)
+		// Error returned from activity triggers retries - Temporal will handle retry logic
 		return activities.NodeExecutionResult{
 			Error:        err,
 			ActivityName: nodeName,
@@ -187,14 +188,20 @@ func executeActivityNode(
 		}, err
 	}
 
-	// Return success result
+	// Use event type from activity result, default to condition_satisfied if not set
+	eventType := activityResult.EventType
+	if eventType == "" {
+		eventType = domain.EventTypeConditionSatisfied
+	}
+
+	// Return success result with event type from activity
 	result := activities.NodeExecutionResult{
 		Error:        nil,
 		ActivityName: nodeName,
-		EventType:    domain.EventTypeConditionSatisfied,
+		EventType:    eventType,
 	}
 
-	logger.Info("Activity node completed", "node_name", nodeName)
+	logger.Info("Activity node completed", "node_name", nodeName, "event_type", eventType)
 	return result, nil
 }
 
