@@ -6,74 +6,113 @@ A Proof of Concept demonstrating a dynamic, node-based workflow orchestration sy
 
 ## Table of Contents
 
-- [Setup](#setup)
-  - [Prerequisites](#prerequisites)
-  - [Step 1: Clone and Start Temporal Server](#step-1-clone-and-start-temporal-server)
-  - [Step 2: Start the Worker](#step-2-start-the-worker)
-  - [Step 3: Start the Server (HTTP API)](#step-3-start-the-server-http-api)
-  - [Step 4: Test the System](#step-4-test-the-system)
-- [Architecture](#architecture)
-  - [Overview](#overview)
-  - [System Components](#system-components)
-  - [Core Concepts](#core-concepts)
-    - [Workflow Definition](#1-workflow-definition)
-    - [Nodes](#2-nodes)
-    - [Event Types](#3-event-types)
-    - [Conditions](#4-conditions)
-- [Deep Dive: Workflow Definition Structure](#deep-dive-workflow-definition-structure)
-  - [Example Workflow Definition](#example-workflow-definition)
-  - [Workflow Flow Graph](#workflow-flow-graph)
-  - [Flow Execution](#flow-execution)
-  - [Conditional Branching Logic](#conditional-branching-logic)
-- [Deep Dive: Node Execution Flow](#deep-dive-node-execution-flow)
-  - [Execution Methods: Workflow Tasks vs Activity Tasks](#execution-methods-workflow-tasks-vs-activity-tasks)
-  - [Execution Flow Diagram](#execution-flow-diagram)
-  - [Unified Register System](#unified-register-system)
-- [Deep Dive: Node Types](#deep-dive-node-types)
-  - [Send Message Node](#1-send-message-node)
-  - [Wait Answer Node](#2-wait-answer-node)
-  - [Timeout Webhook Node](#3-timeout-webhook-node)
-  - [Explicity Wait Node](#4-explicity-wait-node)
-- [Deep Dive: Search Attributes](#deep-dive-search-attributes)
-- [Deep Dive: Schema Validation](#deep-dive-schema-validation)
-  - [Node Schema Definition](#node-schema-definition)
-  - [Step Schema Input](#step-schema-input)
-  - [Schema Validation Process](#schema-validation-process)
-  - [Using Schema in Nodes](#using-schema-in-nodes)
-- [Deep Dive: Workflow Validation](#deep-dive-workflow-validation)
-- [Retry Policy Configuration](#retry-policy-configuration)
-  - [Configuring Retry Policy](#configuring-retry-policy)
-  - [No Retry Policy](#no-retry-policy)
-  - [Retry Policy Parameters](#retry-policy-parameters)
-- [State Safety and Determinism](#state-safety-and-determinism)
-  - [Worker Restart Scenario](#worker-restart-scenario)
-- [Project Structure](#project-structure)
-- [Key Design Patterns](#key-design-patterns)
-  - [Registry Pattern](#1-registry-pattern)
-  - [Container Pattern](#2-container-pattern)
-  - [Strategy Pattern](#3-strategy-pattern)
-  - [Chain of Responsibility (Implicit)](#4-chain-of-responsibility-implicit)
-- [Extending the System](#extending-the-system)
-  - [Adding a New Node](#adding-a-new-node)
-  - [Workflow Config Builder (Assembler)](#workflow-config-builder-assembler)
-  - [Modifying Workflow Definition](#modifying-workflow-definition)
-- [API Reference](#api-reference)
-  - [HTTP Server Endpoints](#http-server-endpoints)
-    - [GET /nodes](#get-nodes)
-    - [POST /start-workflow](#post-start-workflow)
-    - [POST /send-signal](#post-send-signal)
-    - [GET /workflow-status/:workflow_id](#get-workflow-statusworkflow_id)
-- [Troubleshooting](#troubleshooting)
-  - [Search Attributes Not Registered](#search-attributes-not-registered)
-  - [Worker Not Processing Tasks](#worker-not-processing-tasks)
-  - [Workflow Stuck](#workflow-stuck)
-- [Recent Features](#recent-features)
-- [Future Enhancements](#future-enhancements)
-- [Why Use Temporal: Pros and Cons](#why-use-temporal-pros-and-cons)
-  - [Pros: Why Temporal is Powerful](#pros-why-temporal-is-powerful)
-  - [Cons: Challenges and Considerations](#cons-challenges-and-considerations)
-  - [When to Use Temporal](#when-to-use-temporal)
-  - [Conclusion](#conclusion)
+- [Temporal POC - Dynamic Workflow Orchestration System](#temporal-poc---dynamic-workflow-orchestration-system)
+  - [Table of Contents](#table-of-contents)
+  - [Setup](#setup)
+    - [Prerequisites](#prerequisites)
+    - [Step 1: Clone and Start Temporal Server](#step-1-clone-and-start-temporal-server)
+    - [Step 2: Start the Worker](#step-2-start-the-worker)
+    - [Step 3: Start the Server (HTTP API)](#step-3-start-the-server-http-api)
+    - [Step 4: Test the System](#step-4-test-the-system)
+  - [Architecture](#architecture)
+    - [Overview](#overview)
+    - [System Components](#system-components)
+    - [Core Concepts](#core-concepts)
+      - [1. Workflow Definition](#1-workflow-definition)
+      - [2. Nodes](#2-nodes)
+        - [Node Types: Workflow Tasks vs Activity Tasks](#node-types-workflow-tasks-vs-activity-tasks)
+        - [Node Registration](#node-registration)
+      - [3. Event Types](#3-event-types)
+      - [4. Conditions](#4-conditions)
+    - [Deep Dive: Workflow Definition Structure](#deep-dive-workflow-definition-structure)
+      - [Example Workflow Definition](#example-workflow-definition)
+      - [Workflow Flow Graph](#workflow-flow-graph)
+      - [Flow Execution](#flow-execution)
+      - [Conditional Branching Logic](#conditional-branching-logic)
+    - [Deep Dive: Node Execution Flow](#deep-dive-node-execution-flow)
+      - [Execution Methods: Workflow Tasks vs Activity Tasks](#execution-methods-workflow-tasks-vs-activity-tasks)
+      - [Execution Flow Diagram](#execution-flow-diagram)
+      - [Unified Register System](#unified-register-system)
+    - [Deep Dive: Node Types](#deep-dive-node-types)
+      - [1. Send Message Node](#1-send-message-node)
+      - [2. Wait Answer Node](#2-wait-answer-node)
+      - [3. Timeout Webhook Node](#3-timeout-webhook-node)
+      - [4. Explicity Wait Node](#4-explicity-wait-node)
+    - [Deep Dive: Search Attributes](#deep-dive-search-attributes)
+    - [Deep Dive: Schema Validation](#deep-dive-schema-validation)
+      - [Node Schema Definition](#node-schema-definition)
+        - [Basic Schema Definition](#basic-schema-definition)
+        - [JSON Schema Tag Options](#json-schema-tag-options)
+        - [Complete Examples](#complete-examples)
+        - [JSON Schema Tag Syntax](#json-schema-tag-syntax)
+      - [Step Schema Input](#step-schema-input)
+      - [Schema Validation Process](#schema-validation-process)
+      - [Using Schema in Nodes](#using-schema-in-nodes)
+    - [Deep Dive: Workflow Validation](#deep-dive-workflow-validation)
+    - [Retry Policy Configuration](#retry-policy-configuration)
+      - [Configuring Retry Policy](#configuring-retry-policy)
+      - [No Retry Policy](#no-retry-policy)
+      - [Retry Policy Parameters](#retry-policy-parameters)
+    - [State Safety and Determinism](#state-safety-and-determinism)
+      - [Worker Restart Scenario](#worker-restart-scenario)
+  - [Project Structure](#project-structure)
+  - [Key Design Patterns](#key-design-patterns)
+    - [1. Registry Pattern](#1-registry-pattern)
+    - [2. Container Pattern](#2-container-pattern)
+    - [3. Strategy Pattern](#3-strategy-pattern)
+    - [4. Chain of Responsibility (Implicit)](#4-chain-of-responsibility-implicit)
+  - [Extending the System](#extending-the-system)
+    - [Adding a New Node](#adding-a-new-node)
+      - [Adding a Workflow Task](#adding-a-workflow-task)
+      - [Adding an Activity Task](#adding-an-activity-task)
+    - [Workflow Config Builder (Assembler)](#workflow-config-builder-assembler)
+    - [Modifying Workflow Definition](#modifying-workflow-definition)
+    - [Workflow Versioning](#workflow-versioning)
+      - [Why Versioning is Important](#why-versioning-is-important)
+      - [Versioning Methods](#versioning-methods)
+      - [Versioning with Patching](#versioning-with-patching)
+        - [Basic Patching Example](#basic-patching-example)
+        - [Multiple Version Support](#multiple-version-support)
+        - [Deprecating Old Versions](#deprecating-old-versions)
+        - [Checking for Old Versions](#checking-for-old-versions)
+      - [Versioning in This System](#versioning-in-this-system)
+      - [Best Practices](#best-practices)
+      - [Worker Versioning](#worker-versioning)
+  - [API Reference](#api-reference)
+    - [HTTP Server Endpoints](#http-server-endpoints)
+      - [GET /nodes](#get-nodes)
+      - [POST /start-workflow](#post-start-workflow)
+      - [POST /send-signal](#post-send-signal)
+      - [GET /workflow-status/:workflow\_id](#get-workflow-statusworkflow_id)
+  - [Troubleshooting](#troubleshooting)
+    - [Search Attributes Not Registered](#search-attributes-not-registered)
+    - [Worker Not Processing Tasks](#worker-not-processing-tasks)
+    - [Workflow Stuck](#workflow-stuck)
+  - [Recent Features](#recent-features)
+    - [✅ Activity Tasks vs Workflow Tasks](#-activity-tasks-vs-workflow-tasks)
+    - [✅ Schema Validation](#-schema-validation)
+    - [✅ Unified Register System](#-unified-register-system)
+    - [✅ Workflow Config Builder (Assembler)](#-workflow-config-builder-assembler)
+  - [Future Enhancements](#future-enhancements)
+  - [Why Use Temporal: Pros and Cons](#why-use-temporal-pros-and-cons)
+    - [Pros: Why Temporal is Powerful](#pros-why-temporal-is-powerful)
+      - [1. **Durability and Reliability**](#1-durability-and-reliability)
+      - [2. **Developer Experience**](#2-developer-experience)
+      - [3. **Scalability and Performance**](#3-scalability-and-performance)
+      - [4. **Observability and Debugging**](#4-observability-and-debugging)
+      - [5. **Advanced Features**](#5-advanced-features)
+      - [6. **Separation of Concerns**](#6-separation-of-concerns)
+      - [7. **Retry and Error Handling**](#7-retry-and-error-handling)
+    - [Cons: Challenges and Considerations](#cons-challenges-and-considerations)
+      - [1. **Learning Curve**](#1-learning-curve)
+      - [2. **Infrastructure Complexity**](#2-infrastructure-complexity)
+      - [3. **Cost Considerations**](#3-cost-considerations)
+      - [4. **Debugging Complexity**](#4-debugging-complexity)
+      - [5. **Development Workflow**](#5-development-workflow)
+      - [6. **Performance Considerations**](#6-performance-considerations)
+      - [7. **Vendor Lock-in**](#7-vendor-lock-in)
+    - [When to Use Temporal](#when-to-use-temporal)
+    - [Conclusion](#conclusion)
 
 ## Setup
 
@@ -1652,6 +1691,250 @@ execConfig := workflows.WorkflowExecutionConfig{
 - Database
 - API endpoints
 - Drag-and-drop UI configuration
+
+### Workflow Versioning
+
+---
+
+Since Workflow Executions in Temporal can run for long periods — sometimes months or even years — it's common to need to make changes to a Workflow Definition, even while a particular Workflow Execution is in progress.
+
+The Temporal Platform requires that Workflow code is **deterministic**. If you make a change to your Workflow code that would cause non-deterministic behavior on Replay, you'll need to use one of Temporal's Versioning methods to gracefully update your running Workflows. With Versioning, you can modify your Workflow Definition so that new executions use the updated code, while existing ones continue running the original version.
+
+**Reference**: [Temporal Versioning Documentation](http://docs.temporal.io/develop/go/versioning)
+
+#### Why Versioning is Important
+
+---
+
+Temporal workflows must be deterministic — given the same event history, they produce the same result. The Temporal Go SDK performs a **runtime check** to help prevent obvious incompatible changes. Adding, removing, or reordering any of these methods without Versioning triggers the runtime check and results in a nondeterminism error:
+
+- `workflow.ExecuteActivity()`
+- `workflow.ExecuteChildWorkflow()`
+- `workflow.NewTimer()` / `workflow.NewTimerWithOptions()`
+- `workflow.RequestCancelWorkflow()`
+- `workflow.SideEffect()`
+- `workflow.SignalExternalWorkflow()`
+- `workflow.Sleep()`
+
+**Important**: The runtime check does not perform a thorough check. For example, it does not check on the Activity's input arguments or the Timer duration. Each Temporal SDK implements these sanity checks differently, and they are not a complete check for non-deterministic changes. Instead, you should incorporate **Replay Testing** when making revisions.
+
+#### Versioning Methods
+
+---
+
+There are two primary Versioning methods:
+
+1. **Versioning with Patching** (using `workflow.GetVersion()`): This method works by adding branches to your code tied to specific revisions. It applies a code change to new Workflow Executions while avoiding disruptive changes to in-progress ones.
+
+2. **Worker Versioning**: The Worker Versioning feature allows you to tag your Workers and programmatically roll them out in versioned deployments, so that old Workers can run old code paths and new Workers can run new code paths.
+
+#### Versioning with Patching
+
+---
+
+A **Patch** defines a logical branch in a Workflow for a specific change, similar to a feature flag. It applies a code change to new Workflow Executions while avoiding disruptive changes to in-progress ones.
+
+##### Basic Patching Example
+
+Consider a workflow node that executes an activity:
+
+```go
+func myNodeProcessor(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+    // Original code - executes ActivityA
+    err := workflow.ExecuteActivity(ctx, ActivityA, data).Get(ctx, &result)
+    if err != nil {
+        return NodeExecutionResult{Error: err}
+    }
+    // ... rest of logic
+}
+```
+
+If you want to replace `ActivityA` with `ActivityB`, you need to use `workflow.GetVersion()`:
+
+```go
+func myNodeProcessor(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+    // Create a patch for this change
+    v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
+    var result string
+    var err error
+    
+    if v == workflow.DefaultVersion {
+        // Old code path - for existing workflows
+        err = workflow.ExecuteActivity(ctx, ActivityA, data).Get(ctx, &result)
+    } else {
+        // New code path - for new workflows
+        err = workflow.ExecuteActivity(ctx, ActivityB, data).Get(ctx, &result)
+    }
+    
+    if err != nil {
+        return NodeExecutionResult{Error: err}
+    }
+    // ... rest of logic
+}
+```
+
+**How it works**:
+- When `workflow.GetVersion()` is run for a **new** Workflow Execution, it records a marker in the Event History
+- All future calls to `GetVersion` for this change ID (`"Step1"`) on this Workflow Execution will always return the given version number (`1`)
+- Existing Workflow Executions that were started before this change return `DefaultVersion`
+- New Workflow Executions return version `1`
+
+##### Multiple Version Support
+
+If you make an additional change (e.g., replacing `ActivityB` with `ActivityC`), you need to support multiple versions:
+
+```go
+func myNodeProcessor(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+    // Support versions: DefaultVersion, 1, and 2
+    v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 2)
+    var result string
+    var err error
+    
+    if v == workflow.DefaultVersion {
+        // Original version - ActivityA
+        err = workflow.ExecuteActivity(ctx, ActivityA, data).Get(ctx, &result)
+    } else if v == 1 {
+        // First change - ActivityB
+        err = workflow.ExecuteActivity(ctx, ActivityB, data).Get(ctx, &result)
+    } else {
+        // Latest version - ActivityC
+        err = workflow.ExecuteActivity(ctx, ActivityC, data).Get(ctx, &result)
+    }
+    
+    if err != nil {
+        return NodeExecutionResult{Error: err}
+    }
+    // ... rest of logic
+}
+```
+
+**Note**: We changed `maxSupported` from `1` to `2`. A Workflow that has already passed this `GetVersion()` call before it was introduced returns `DefaultVersion`. A Workflow that was run with `maxSupported` set to `1` returns `1`. New Workflows return `2`.
+
+##### Deprecating Old Versions
+
+After all the Workflow Executions prior to version 1 have left retention, you can remove the code for that version:
+
+```go
+func myNodeProcessor(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+    // minSupported changed from DefaultVersion to 1
+    v := workflow.GetVersion(ctx, "Step1", 1, 2)
+    var result string
+    var err error
+    
+    if v == 1 {
+        // ActivityB
+        err = workflow.ExecuteActivity(ctx, ActivityB, data).Get(ctx, &result)
+    } else {
+        // ActivityC
+        err = workflow.ExecuteActivity(ctx, ActivityC, data).Get(ctx, &result)
+    }
+    
+    if err != nil {
+        return NodeExecutionResult{Error: err}
+    }
+    // ... rest of logic
+}
+```
+
+**Important**: You'll note that `minSupported` has changed from `DefaultVersion` to `1`. If an older version of the Workflow Execution history is replayed on this code, it fails because the minimum expected version is 1.
+
+After all the Workflow Executions for version 1 have left retention, you can remove version 1:
+
+```go
+func myNodeProcessor(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+    // Only version 2 supported now
+    _ := workflow.GetVersion(ctx, "Step1", 2, 2)
+    
+    // Latest version - ActivityC
+    var result string
+    err := workflow.ExecuteActivity(ctx, ActivityC, data).Get(ctx, &result)
+    if err != nil {
+        return NodeExecutionResult{Error: err}
+    }
+    // ... rest of logic
+}
+```
+
+**Why preserve the call**: Even though we only support version 2, we preserve the call to `GetVersion()` because:
+1. This ensures that if there is a Workflow Execution still running for an older version, it will fail here and not proceed.
+2. If you need to make additional changes for `Step1`, such as changing ActivityC to ActivityD, you only need to update `maxVersion` from 2 to 3 and branch from there.
+
+##### Checking for Old Versions
+
+You can use Temporal's List Filter syntax to check if any old versions are still running:
+
+**Check for specific version**:
+```
+WorkflowType = "DynamicWorkflow" 
+    AND ExecutionStatus = "Running" 
+    AND TemporalChangeVersion="Step1-1"
+```
+
+**Check for workflows without version markers** (started before versioning was added):
+```
+WorkflowType = "DynamicWorkflow" 
+    AND ExecutionStatus = "Running" 
+    AND TemporalChangeVersion IS NULL
+```
+
+#### Versioning in This System
+
+---
+
+When making changes to workflow nodes in this system, consider versioning if you:
+
+1. **Change activity calls**: Replacing one activity with another
+2. **Modify timer durations**: Changing timeout values in workflow tasks
+3. **Add or remove workflow operations**: Adding new `workflow.Sleep()`, `workflow.NewTimer()`, or signal handling
+4. **Change node execution order**: Reordering steps in a way that affects determinism
+
+**Example**: If you modify the `wait_answer` node to use a different timeout calculation:
+
+```go
+func waitAnswerProcessorNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+    // Create version patch for timeout calculation change
+    v := workflow.GetVersion(ctx, "WaitAnswerTimeout", workflow.DefaultVersion, 1)
+    
+    var waitAnswerTimeout time.Duration
+    if v == workflow.DefaultVersion {
+        // Old calculation
+        waitAnswerTimeout = 60 * time.Second
+    } else {
+        // New calculation
+        waitAnswerTimeout = 30 * time.Second
+    }
+    
+    // Apply schema override if provided
+    if schema, err := helpers.UnmarshalSchema[WaitAnswerSchema](activityCtx.Schema); err == nil {
+        if schema.TimeoutSeconds > 0 {
+            waitAnswerTimeout = time.Duration(schema.TimeoutSeconds) * time.Second
+        }
+    }
+    
+    // ... rest of the logic
+}
+```
+
+#### Best Practices
+
+---
+
+1. **Use descriptive change IDs**: Use meaningful names like `"WaitAnswerTimeout"` or `"SendMessageActivity"` instead of generic names
+2. **One change per patch**: Create separate patches for different changes rather than combining them
+3. **Test with replay**: Always test workflow changes with replay testing to ensure determinism
+4. **Monitor old versions**: Regularly check for old workflow versions before removing support
+5. **Document changes**: Keep track of version changes and when they can be safely removed
+6. **Gradual deprecation**: Remove old versions only after all executions have completed and left retention
+
+#### Worker Versioning
+
+---
+
+Temporal's Worker Versioning feature allows you to tag your Workers and programmatically roll them out in Deployment Versions, so that old Workers can run old code paths and new Workers can run new code paths. This way, you can pin your Workflows to specific revisions, avoiding the need for patching.
+
+**Note**: Support for the experimental Worker Versioning method before 2025 will be removed from Temporal Server in March 2026. Refer to the latest Worker Versioning docs for guidance.
+
+For more information on Worker Versioning, see the [Temporal Worker Versioning Documentation](http://docs.temporal.io/develop/go/versioning#worker-versioning).
 
 ## API Reference
 
