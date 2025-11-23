@@ -1,12 +1,12 @@
 package workflow_tasks
 
 import (
-	"fmt"
-	"temporal-poc/src/core/domain"
-	"temporal-poc/src/helpers"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
+
+	"temporal-poc/src/core/domain"
+	"temporal-poc/src/helpers"
 )
 
 var ExplicitWaitName = "explicity_wait"
@@ -37,19 +37,14 @@ func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext)
 	}
 
 	// Create timer with summary for UI visibility
-	// Equivalent to Java: Workflow.newTimer(Duration.ofSeconds(2), TimerOptions.newBuilder().setSummary("my-timer").build())
-	timerSummary := fmt.Sprintf("%s-wait", activityCtx.NodeName)
-	timerOptions := workflow.TimerOptions{
-		Summary: timerSummary,
-	}
-	logger.Info("Creating timer for explicit wait", "node_name", activityCtx.NodeName, "duration", waitDuration, "summary", timerSummary)
+	logger.Info("Creating timer for explicit wait", "node_name", activityCtx.NodeName, "duration", waitDuration)
 
-	// Use NewTimerWithOptions instead of Sleep to set timer summary for UI visibility
+	// Use NewTimerWithSummary helper to create a timer with summary for UI visibility
 	// This creates a named timer that will be visible in the Temporal UI
-	timer := workflow.NewTimerWithOptions(ctx, waitDuration, timerOptions)
-	err := timer.Get(ctx, nil)
+	timerFuture := NewTimerWithSummary(ctx, waitDuration, "Explicity Wait Node")
+	err := timerFuture.Get(ctx, nil)
 	if err != nil {
-		logger.Error("Timer was canceled", "error", err, "timer_name", timerSummary, "node_name", activityCtx.NodeName)
+		logger.Error("Timer was canceled", "error", err, "node_name", activityCtx.NodeName)
 		return NodeExecutionResult{
 			Error:        err,
 			ActivityName: ExplicitWaitName,
@@ -57,7 +52,7 @@ func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext)
 		}
 	}
 	// Timer completed successfully
-	logger.Info("Timer completed successfully", "timer_name", timerSummary, "node_name", activityCtx.NodeName, "duration", waitDuration)
+	logger.Info("Timer completed successfully", "node_name", activityCtx.NodeName, "duration", waitDuration)
 	return NodeExecutionResult{
 		Error:        nil,
 		ActivityName: ExplicitWaitName,
