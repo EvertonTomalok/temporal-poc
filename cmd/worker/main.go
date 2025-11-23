@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"temporal-poc/src/config"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/nodes/activities"
@@ -60,12 +61,13 @@ func main() {
 	baseLogger := core.NewLoggerWithoutWarnings()
 	filteredLogger := core.NewFilteredLogger(baseLogger)
 
-	// Create Temporal client with filtered logger
-	c, err := client.Dial(client.Options{
-		HostPort: client.DefaultHostPort,
-		Identity: fmt.Sprintf("worker-%s", uuid.New().String()),
-		Logger:   filteredLogger,
-	})
+	// Load Temporal client configuration from .env file
+	clientOptions := config.LoadTemporalClientOptions()
+	clientOptions.Identity = fmt.Sprintf("worker-%s", uuid.New().String())
+	clientOptions.Logger = filteredLogger
+
+	// Create Temporal client
+	c, err := client.Dial(clientOptions)
 	if err != nil {
 		log.Fatalln("Unable to create client", err)
 	}

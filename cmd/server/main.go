@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"sort"
 	"syscall"
+	"temporal-poc/src/config"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/register"
@@ -30,12 +31,13 @@ import (
 var temporalClient client.Client
 
 func init() {
+	// Load Temporal client configuration from .env file
+	clientOptions := config.LoadTemporalClientOptions()
+	clientOptions.Logger = core.NewLoggerWithoutWarnings()
+
 	// Create Temporal client on startup
 	var err error
-	temporalClient, err = client.Dial(client.Options{
-		HostPort: client.DefaultHostPort,
-		Logger:   core.NewLoggerWithoutWarnings(),
-	})
+	temporalClient, err = client.Dial(clientOptions)
 	if err != nil {
 		log.Fatalln("Unable to create Temporal client", err)
 	}

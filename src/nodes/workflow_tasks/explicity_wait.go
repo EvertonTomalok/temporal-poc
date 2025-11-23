@@ -1,6 +1,7 @@
 package workflow_tasks
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -41,7 +42,7 @@ func processExplicityWaitNode(ctx workflow.Context, activityCtx ActivityContext)
 
 	// Use NewTimerWithSummary helper to create a timer with summary for UI visibility
 	// This creates a named timer that will be visible in the Temporal UI
-	timerFuture := NewTimerWithSummary(ctx, waitDuration, "Explicity Wait Node")
+	timerFuture := NewTimerWithSummary(ctx, waitDuration, fmt.Sprintf("Explicity Wait %s", waitDuration))
 	err := timerFuture.Get(ctx, nil)
 	if err != nil {
 		logger.Error("Timer was canceled", "error", err, "node_name", activityCtx.NodeName)
