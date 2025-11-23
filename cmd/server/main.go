@@ -385,7 +385,7 @@ func getWorkflowStatusHandler(c echo.Context) error {
 	ctx := context.Background()
 	resp, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, runID)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
+		return c.JSON(http.StatusNotFound, map[string]string{
 			"error": fmt.Sprintf("Unable to describe workflow: %v", err),
 		})
 	}

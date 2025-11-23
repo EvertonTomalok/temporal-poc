@@ -47,6 +47,16 @@ func LoadTemporalClientOptions() client.Options {
 	namespace := os.Getenv("TEMPORAL_NAMESPACE")
 	apiKey := os.Getenv("TEMPORAL_API_KEY")
 
+	// Determine if we're connecting to local Temporal server
+	isLocal := apiKey == "" && (hostPort == client.DefaultHostPort || hostPort == "localhost:7233" || hostPort == "127.0.0.1:7233")
+
+	// For local development, always use "default" namespace
+	// For Temporal Cloud, use the namespace from environment
+	if isLocal {
+		namespace = "default"
+		log.Println("Detected local Temporal server, using 'default' namespace")
+	}
+
 	// Log loaded configuration (without sensitive data)
 	log.Printf("Temporal client config - HostPort: %s, Namespace: %s, HasAPIKey: %v",
 		hostPort, namespace, apiKey != "")
