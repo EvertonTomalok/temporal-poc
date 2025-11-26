@@ -8,7 +8,6 @@ import (
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
-	nodes "temporal-poc/src/nodes"
 )
 
 var WaitAnswerName = "wait_answer"
@@ -29,9 +28,8 @@ func init() {
 	RegisterNode(
 		WaitAnswerName,
 		waitAnswerProcessorNode,
-		NodeTypeWorkflowTask,
-		nodes.WithSchemaWorkflowTask(schema),
-		nodes.WithPublicVisibilityWorkflowTask(),
+		WithSchemaWorkflowTask(schema),
+		WithPublicVisibilityWorkflowTask(),
 	)
 }
 

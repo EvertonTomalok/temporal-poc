@@ -11,7 +11,6 @@ import (
 
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
-	"temporal-poc/src/nodes"
 )
 
 const SendMessageActivityName = "send_message"
@@ -37,9 +36,9 @@ func init() {
 	RegisterActivity(
 		SendMessageActivityName,
 		SendMessageActivity,
-		nodes.WithRetryPolicy(retryPolicy),
-		nodes.WithSchema(schema),
-		nodes.WithPublicVisibility(),
+		WithRetryPolicy(retryPolicy),
+		WithSchema(schema),
+		WithPublicVisibility(),
 	)
 }
 

@@ -12,7 +12,6 @@ import (
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
-	"temporal-poc/src/nodes"
 	activity_helpers "temporal-poc/src/nodes/activities/helpers"
 )
 
@@ -40,9 +39,9 @@ func init() {
 	RegisterActivity(
 		BoughtAnyOfferActivityName,
 		BoughtAnyOfferActivity,
-		nodes.WithRetryPolicy(retryPolicy),
-		nodes.WithSchema(schema),
-		nodes.WithPublicVisibility(),
+		WithRetryPolicy(retryPolicy),
+		WithSchema(schema),
+		WithPublicVisibility(),
 	)
 }
 

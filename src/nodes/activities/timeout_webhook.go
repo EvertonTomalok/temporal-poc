@@ -2,14 +2,14 @@ package activities
 
 import (
 	"context"
-	"temporal-poc/src/core"
-	"temporal-poc/src/core/domain"
-	"temporal-poc/src/nodes"
-	activity_helpers "temporal-poc/src/nodes/activities/helpers"
 	"time"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+
+	"temporal-poc/src/core"
+	"temporal-poc/src/core/domain"
+	activity_helpers "temporal-poc/src/nodes/activities/helpers"
 )
 
 const TimeoutWebhookActivityName = "webhook"
@@ -35,9 +35,9 @@ func init() {
 	RegisterActivity(
 		TimeoutWebhookActivityName,
 		TimeoutWebhookActivity,
-		nodes.WithRetryPolicy(retryPolicy),
-		nodes.WithSchema(schema),
-		nodes.WithPublicVisibility(),
+		WithRetryPolicy(retryPolicy),
+		WithSchema(schema),
+		WithPublicVisibility(),
 	)
 }
 

@@ -8,7 +8,6 @@ import (
 
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
-	"temporal-poc/src/nodes"
 )
 
 var ExplicitWaitName = "explicity_wait"
@@ -24,9 +23,8 @@ func init() {
 	RegisterNode(
 		ExplicitWaitName,
 		processExplicityWaitNode,
-		NodeTypeWorkflowTask,
-		nodes.WithSchemaWorkflowTask(explicity_wait_schema),
-		nodes.WithPublicVisibilityWorkflowTask(),
+		WithSchemaWorkflowTask(explicity_wait_schema),
+		WithPublicVisibilityWorkflowTask(),
 	)
 }
 

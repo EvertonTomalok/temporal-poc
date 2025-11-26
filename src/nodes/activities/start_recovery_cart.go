@@ -11,7 +11,6 @@ import (
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
-	"temporal-poc/src/nodes"
 	"temporal-poc/src/services"
 )
 
@@ -42,9 +41,9 @@ func init() {
 	RegisterActivity(
 		StartRecoveryCartActivityName,
 		StartRecoveryCartActivity,
-		nodes.WithRetryPolicy(retryPolicy),
-		nodes.WithSchema(schema),
-		nodes.WithPublicVisibility(),
+		WithRetryPolicy(retryPolicy),
+		WithSchema(schema),
+		WithPublicVisibility(),
 	)
 }
 

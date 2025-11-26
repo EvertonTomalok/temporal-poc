@@ -25,6 +25,9 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 			},
 			"step_2": {
 				Node: "notify_creator",
+				Schema: map[string]interface{}{ // Schema input validated against node schema
+					"message": "Hello, this is a test message",
+				},
 			},
 			"step_3": {
 				Node: "send_message", // Activity task

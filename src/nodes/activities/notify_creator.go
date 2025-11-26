@@ -6,7 +6,6 @@ import (
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
-	"temporal-poc/src/nodes"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -37,9 +36,9 @@ func init() {
 	RegisterActivity(
 		NotifyCreatorActivityName,
 		NotifyCreatorActivity,
-		nodes.WithRetryPolicy(retryPolicy),
-		nodes.WithSchema(schema),
-		nodes.WithPublicVisibility(),
+		WithRetryPolicy(retryPolicy),
+		WithSchema(schema),
+		WithPublicVisibility(),
 	)
 }
 

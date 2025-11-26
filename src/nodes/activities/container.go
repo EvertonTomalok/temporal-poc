@@ -10,7 +10,6 @@ import (
 
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
-	nodes "temporal-poc/src/nodes"
 )
 
 // ActivityContext holds the context passed to activities
@@ -87,13 +86,13 @@ func GetContainer() *Container {
 // RegisterActivity registers an activity function with a name and optional configuration
 // This is called by each activity's init() function
 // Options can be provided using WithRetryPolicy, WithSchema, WithPublicVisibility, WithInternalVisibility
-func RegisterActivity(name string, fn ActivityFunction, opts ...func(*nodes.ActivityOptions)) {
+func RegisterActivity(name string, fn ActivityFunction, opts ...func(*ActivityOptions)) {
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
 
 	// Apply default options
-	options := &nodes.ActivityOptions{
+	options := &ActivityOptions{
 		Visibility: "public", // Default to public
 	}
 

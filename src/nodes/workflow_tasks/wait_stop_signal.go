@@ -7,7 +7,6 @@ import (
 
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
-	"temporal-poc/src/nodes"
 )
 
 var WaitStopSignalName = "wait_stop_signal"
@@ -29,9 +28,8 @@ func init() {
 	RegisterNode(
 		WaitStopSignalName,
 		waitStopSignalProcessorNode,
-		NodeTypeWorkflowTask,
-		nodes.WithSchemaWorkflowTask(schema),
-		nodes.WithInternalVisibilityWorkflowTask(),
+		WithSchemaWorkflowTask(schema),
+		WithInternalVisibilityWorkflowTask(),
 	)
 }
 

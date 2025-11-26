@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"temporal-poc/src/core/domain"
-	nodes "temporal-poc/src/nodes"
 	"temporal-poc/src/nodes/activities"
 )
 
@@ -63,19 +62,15 @@ func GetContainer() *Container {
 
 // RegisterNode registers a workflow task node name and processor in the container
 // This is called by each workflow task node's init() function
-// This container only accepts workflow tasks (NodeTypeWorkflowTask)
+// This container only accepts workflow tasks (assumes NodeTypeWorkflowTask)
 // Options can be provided using WithRetryPolicyWorkflowTask, WithSchemaWorkflowTask, WithPublicVisibilityWorkflowTask, WithInternalVisibilityWorkflowTask
-func RegisterNode(name string, processor ActivityProcessor, nodeType NodeType, opts ...func(*nodes.WorkflowTaskOptions)) {
-	if nodeType != NodeTypeWorkflowTask {
-		// This container only handles workflow tasks
-		return
-	}
+func RegisterNode(name string, processor ActivityProcessor, opts ...func(*WorkflowTaskOptions)) {
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
 
 	// Apply default options
-	options := &nodes.WorkflowTaskOptions{
+	options := &WorkflowTaskOptions{
 		Visibility: "public", // Default to public
 	}
 
