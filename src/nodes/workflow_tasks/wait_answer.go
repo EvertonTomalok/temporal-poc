@@ -8,6 +8,7 @@ import (
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
+	nodes "temporal-poc/src/nodes"
 )
 
 var WaitAnswerName = "wait_answer"
@@ -24,9 +25,14 @@ func init() {
 	}
 
 	// Register node with container (processor and workflow node)
-	// No retry policy - pass nil for empty retry policy
 	// This is a workflow task because it waits for signals and uses timers
-	RegisterNode(WaitAnswerName, waitAnswerProcessorNode, nil, NodeTypeWorkflowTask, schema)
+	RegisterNode(
+		WaitAnswerName,
+		waitAnswerProcessorNode,
+		NodeTypeWorkflowTask,
+		nodes.WithSchemaWorkflowTask(schema),
+		nodes.WithPublicVisibilityWorkflowTask(),
+	)
 }
 
 // WaitAnswerWorkflowNode is the workflow node that handles waiting for client-answered signal or timeout

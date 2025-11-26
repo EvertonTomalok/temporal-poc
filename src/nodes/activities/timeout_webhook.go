@@ -4,6 +4,7 @@ import (
 	"context"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
+	"temporal-poc/src/nodes"
 	activity_helpers "temporal-poc/src/nodes/activities/helpers"
 	"time"
 
@@ -31,7 +32,13 @@ func init() {
 	schema := &domain.NodeSchema{
 		SchemaStruct: WebhookSchema{},
 	}
-	RegisterActivity(TimeoutWebhookActivityName, TimeoutWebhookActivity, retryPolicy, schema)
+	RegisterActivity(
+		TimeoutWebhookActivityName,
+		TimeoutWebhookActivity,
+		nodes.WithRetryPolicy(retryPolicy),
+		nodes.WithSchema(schema),
+		nodes.WithPublicVisibility(),
+	)
 }
 
 // TimeoutWebhookActivity sends a webhook notification on timeout

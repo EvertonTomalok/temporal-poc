@@ -12,6 +12,7 @@ import (
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
+	"temporal-poc/src/nodes"
 	activity_helpers "temporal-poc/src/nodes/activities/helpers"
 )
 
@@ -36,7 +37,13 @@ func init() {
 		SchemaStruct: BoughtAnyOfferSchema{},
 	}
 
-	RegisterActivity(BoughtAnyOfferActivityName, BoughtAnyOfferActivity, retryPolicy, schema)
+	RegisterActivity(
+		BoughtAnyOfferActivityName,
+		BoughtAnyOfferActivity,
+		nodes.WithRetryPolicy(retryPolicy),
+		nodes.WithSchema(schema),
+		nodes.WithPublicVisibility(),
+	)
 }
 
 // BoughtAnyOfferActivity checks if the user bought any offer in the last N minutes

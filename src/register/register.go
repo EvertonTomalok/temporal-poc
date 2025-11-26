@@ -46,6 +46,7 @@ type NodeInfo struct {
 	Caller      NodeCaller              // Processor for workflow tasks, Function for activities
 	RetryPolicy *temporal.RetryPolicy   // Retry policy (nil means no retry)
 	Schema      *domain.NodeSchema      // Input schema for the node (optional)
+	Visibility  string                  // Visibility: "public" or "internal" (default: "public")
 }
 
 // Register is a singleton that provides unified access to all nodes
@@ -104,6 +105,7 @@ func (r *Register) refreshNodes() {
 				Caller:      processor,
 				RetryPolicy: r.workflowTasksContainer.GetRetryPolicy(name),
 				Schema:      schema,
+				Visibility:  r.workflowTasksContainer.GetVisibility(name),
 			}
 		}
 	}
@@ -120,6 +122,7 @@ func (r *Register) refreshNodes() {
 				Caller:      activityFn,
 				RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
 				Schema:      schema,
+				Visibility:  r.activitiesContainer.GetVisibility(name),
 			}
 		}
 	}
@@ -162,6 +165,7 @@ func (r *Register) GetNodeInfo(name string) (NodeInfo, bool) {
 			Caller:      processor,
 			RetryPolicy: r.workflowTasksContainer.GetRetryPolicy(name),
 			Schema:      schema,
+			Visibility:  r.workflowTasksContainer.GetVisibility(name),
 		}, true
 	}
 
@@ -174,6 +178,7 @@ func (r *Register) GetNodeInfo(name string) (NodeInfo, bool) {
 			Caller:      activityFn,
 			RetryPolicy: r.activitiesContainer.GetRetryPolicy(name),
 			Schema:      schema,
+			Visibility:  r.activitiesContainer.GetVisibility(name),
 		}, true
 	}
 

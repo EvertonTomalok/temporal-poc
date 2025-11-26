@@ -7,6 +7,7 @@ import (
 
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
+	"temporal-poc/src/nodes"
 )
 
 var WaitStopSignalName = "wait_stop_signal"
@@ -23,9 +24,15 @@ func init() {
 	}
 
 	// Register node with container (processor and workflow node)
-	// No retry policy - pass nil for empty retry policy
 	// This is a workflow task because it waits for signals and uses timers
-	RegisterNode(WaitStopSignalName, waitStopSignalProcessorNode, nil, NodeTypeWorkflowTask, schema)
+	// Mark as internal visibility
+	RegisterNode(
+		WaitStopSignalName,
+		waitStopSignalProcessorNode,
+		NodeTypeWorkflowTask,
+		nodes.WithSchemaWorkflowTask(schema),
+		nodes.WithInternalVisibilityWorkflowTask(),
+	)
 }
 
 // WaitStopSignalWorkflowNode is the workflow node that handles waiting for stop signal or timeout

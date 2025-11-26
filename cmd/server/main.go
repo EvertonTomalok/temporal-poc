@@ -636,6 +636,7 @@ type NodeResponse struct {
 	Type        string                 `json:"type"` // "activity" or "workflow_task"
 	RetryPolicy *RetryPolicyResponse   `json:"retry_policy,omitempty"`
 	Schema      map[string]interface{} `json:"schema,omitempty"` // JSON Schema format
+	Visibility  string                 `json:"visibility,omitempty"`
 }
 
 // RetryPolicyResponse represents the retry policy information
@@ -665,7 +666,8 @@ func getNodesHandler(c echo.Context) error {
 		}
 
 		nodeResponse := NodeResponse{
-			Name: nodeInfo.Name,
+			Name:       nodeInfo.Name,
+			Visibility: nodeInfo.Visibility,
 		}
 
 		// Set node type

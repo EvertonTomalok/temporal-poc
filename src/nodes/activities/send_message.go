@@ -11,6 +11,7 @@ import (
 
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
+	"temporal-poc/src/nodes"
 )
 
 const SendMessageActivityName = "send_message"
@@ -33,7 +34,13 @@ func init() {
 	schema := &domain.NodeSchema{
 		SchemaStruct: SendMessageSchema{},
 	}
-	RegisterActivity(SendMessageActivityName, SendMessageActivity, retryPolicy, schema)
+	RegisterActivity(
+		SendMessageActivityName,
+		SendMessageActivity,
+		nodes.WithRetryPolicy(retryPolicy),
+		nodes.WithSchema(schema),
+		nodes.WithPublicVisibility(),
+	)
 }
 
 // SendMessageActivity sends a message to the client

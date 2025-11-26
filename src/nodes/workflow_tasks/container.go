@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"temporal-poc/src/core/domain"
+	nodes "temporal-poc/src/nodes"
 	"temporal-poc/src/nodes/activities"
 )
 
@@ -35,6 +36,7 @@ type WorkflowTaskInfo struct {
 	Processor   ActivityProcessor
 	RetryPolicy *temporal.RetryPolicy // Retry policy for the node (nil means no retry)
 	Schema      *domain.NodeSchema    // Input schema for the node (optional)
+	Visibility  string                // Visibility: "public" or "internal" (default: "public")
 }
 
 // Container holds all registered workflow tasks with their processors
@@ -61,10 +63,9 @@ func GetContainer() *Container {
 
 // RegisterNode registers a workflow task node name and processor in the container
 // This is called by each workflow task node's init() function
-// If retryPolicy is nil, no retry policy will be applied (empty retry policy)
-// If schema is nil, no schema validation will be performed for this node
 // This container only accepts workflow tasks (NodeTypeWorkflowTask)
-func RegisterNode(name string, processor ActivityProcessor, retryPolicy *temporal.RetryPolicy, nodeType NodeType, schema *domain.NodeSchema) {
+// Options can be provided using WithRetryPolicyWorkflowTask, WithSchemaWorkflowTask, WithPublicVisibilityWorkflowTask, WithInternalVisibilityWorkflowTask
+func RegisterNode(name string, processor ActivityProcessor, nodeType NodeType, opts ...func(*nodes.WorkflowTaskOptions)) {
 	if nodeType != NodeTypeWorkflowTask {
 		// This container only handles workflow tasks
 		return
@@ -72,11 +73,23 @@ func RegisterNode(name string, processor ActivityProcessor, retryPolicy *tempora
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
+
+	// Apply default options
+	options := &nodes.WorkflowTaskOptions{
+		Visibility: "public", // Default to public
+	}
+
+	// Apply provided options
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	container.workflowTasks[name] = WorkflowTaskInfo{
 		Name:        name,
 		Processor:   processor,
-		RetryPolicy: retryPolicy,
-		Schema:      schema,
+		RetryPolicy: options.RetryPolicy,
+		Schema:      options.Schema,
+		Visibility:  options.Visibility,
 	}
 }
 
@@ -172,4 +185,20 @@ func (c *Container) GetSchema(name string) (*domain.NodeSchema, bool) {
 // GetSchema is a convenience function that returns the schema for a workflow task node name
 func GetSchema(name string) (*domain.NodeSchema, bool) {
 	return GetContainer().GetSchema(name)
+}
+
+// GetVisibility returns the visibility for a given workflow task node name
+func (c *Container) GetVisibility(name string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	taskInfo, exists := c.workflowTasks[name]
+	if !exists {
+		return "public" // Default to public if not found
+	}
+	return taskInfo.Visibility
+}
+
+// GetVisibility is a convenience function that returns the visibility for a workflow task node name
+func GetVisibility(name string) string {
+	return GetContainer().GetVisibility(name)
 }

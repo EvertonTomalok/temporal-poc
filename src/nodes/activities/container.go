@@ -10,6 +10,7 @@ import (
 
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
+	nodes "temporal-poc/src/nodes"
 )
 
 // ActivityContext holds the context passed to activities
@@ -59,6 +60,7 @@ type ActivityInfo struct {
 	Function    ActivityFunction
 	RetryPolicy *temporal.RetryPolicy // Retry policy for the activity (nil means no retry)
 	Schema      *domain.NodeSchema    // Input schema for the activity (optional)
+	Visibility  string                // Visibility: "public" or "internal" (default: "public")
 }
 
 // Container holds all registered activities
@@ -82,19 +84,30 @@ func GetContainer() *Container {
 	return containerInstance
 }
 
-// RegisterActivity registers an activity function with a name and optional retry policy
+// RegisterActivity registers an activity function with a name and optional configuration
 // This is called by each activity's init() function
-// If retryPolicy is nil, no retry policy will be applied (empty retry policy)
-// If schema is nil, no schema validation will be performed for this activity
-func RegisterActivity(name string, fn ActivityFunction, retryPolicy *temporal.RetryPolicy, schema *domain.NodeSchema) {
+// Options can be provided using WithRetryPolicy, WithSchema, WithPublicVisibility, WithInternalVisibility
+func RegisterActivity(name string, fn ActivityFunction, opts ...func(*nodes.ActivityOptions)) {
 	container := GetContainer()
 	container.mu.Lock()
 	defer container.mu.Unlock()
+
+	// Apply default options
+	options := &nodes.ActivityOptions{
+		Visibility: "public", // Default to public
+	}
+
+	// Apply provided options
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	container.activities[name] = ActivityInfo{
 		Name:        name,
 		Function:    fn,
-		RetryPolicy: retryPolicy,
-		Schema:      schema,
+		RetryPolicy: options.RetryPolicy,
+		Schema:      options.Schema,
+		Visibility:  options.Visibility,
 	}
 }
 
@@ -182,4 +195,20 @@ func (c *Container) GetSchema(name string) (*domain.NodeSchema, bool) {
 // GetSchema is a convenience function that returns the schema for an activity name
 func GetSchema(name string) (*domain.NodeSchema, bool) {
 	return GetContainer().GetSchema(name)
+}
+
+// GetVisibility returns the visibility for a given activity name
+func (c *Container) GetVisibility(name string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	activityInfo, exists := c.activities[name]
+	if !exists {
+		return "public" // Default to public if not found
+	}
+	return activityInfo.Visibility
+}
+
+// GetVisibility is a convenience function that returns the visibility for an activity name
+func GetVisibility(name string) string {
+	return GetContainer().GetVisibility(name)
 }

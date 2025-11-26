@@ -8,6 +8,7 @@ import (
 
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
+	"temporal-poc/src/nodes"
 )
 
 var ExplicitWaitName = "explicity_wait"
@@ -20,7 +21,13 @@ func init() {
 	explicity_wait_schema := &domain.NodeSchema{
 		SchemaStruct: ExplicityWaitSchema{},
 	}
-	RegisterNode(ExplicitWaitName, processExplicityWaitNode, nil, NodeTypeWorkflowTask, explicity_wait_schema)
+	RegisterNode(
+		ExplicitWaitName,
+		processExplicityWaitNode,
+		NodeTypeWorkflowTask,
+		nodes.WithSchemaWorkflowTask(explicity_wait_schema),
+		nodes.WithPublicVisibilityWorkflowTask(),
+	)
 }
 
 // processExplicityWaitNode processes the explicity_wait node

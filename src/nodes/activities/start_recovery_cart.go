@@ -11,6 +11,7 @@ import (
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
+	"temporal-poc/src/nodes"
 	"temporal-poc/src/services"
 )
 
@@ -38,7 +39,13 @@ func init() {
 		SchemaStruct: StartRecoveryCartSchema{},
 	}
 
-	RegisterActivity(StartRecoveryCartActivityName, StartRecoveryCartActivity, retryPolicy, schema)
+	RegisterActivity(
+		StartRecoveryCartActivityName,
+		StartRecoveryCartActivity,
+		nodes.WithRetryPolicy(retryPolicy),
+		nodes.WithSchema(schema),
+		nodes.WithPublicVisibility(),
+	)
 }
 
 // StartRecoveryCartActivity simulates a call to an internal API to start a recovery cart
