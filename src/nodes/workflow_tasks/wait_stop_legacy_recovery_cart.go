@@ -9,46 +9,46 @@ import (
 	"temporal-poc/src/helpers"
 )
 
-var WaitStopSignalName = "wait_stop_signal"
+var WaitStopLegacyRecoveryCartName = "wait_stop_legacy_recovery_cart"
 
-type WaitStopSignalSchema struct {
+type WaitStopLegacyRecoveryCartSchema struct {
 	TimeoutSeconds int64 `json:"timeout_seconds" jsonschema:"description=Timeout in seconds,required"`
 }
 
 func init() {
-	// Define schema struct for wait_stop_signal node
+	// Define schema struct for wait_stop_legacy_recovery_cart node
 	// This struct will be converted to JSON Schema for validation
 	schema := &domain.NodeSchema{
-		SchemaStruct: WaitStopSignalSchema{},
+		SchemaStruct: WaitStopLegacyRecoveryCartSchema{},
 	}
 
 	// Register node with container (processor and workflow node)
 	// This is a workflow task because it waits for signals and uses timers
 	// Mark as internal visibility
 	RegisterNode(
-		WaitStopSignalName,
-		waitStopSignalProcessorNode,
+		WaitStopLegacyRecoveryCartName,
+		waitStopLegacyRecoveryCartProcessorNode,
 		WithSchemaWorkflowTask(schema),
 		WithInternalVisibilityWorkflowTask(),
 	)
 }
 
-// WaitStopSignalWorkflowNode is the workflow node that handles waiting for stop signal or timeout
+// WaitStopLegacyRecoveryCartWorkflowNode is the workflow node that handles waiting for stop signal or timeout
 // It returns whether to continue to the next node or stop the flow
 // This node will wait for a configurable timeout (default 60 seconds) if no signal is received
-func waitStopSignalProcessorNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
+func waitStopLegacyRecoveryCartProcessorNode(ctx workflow.Context, activityCtx ActivityContext) NodeExecutionResult {
 	logger := workflow.GetLogger(ctx)
 
 	// Get timeout from schema, default to 60 seconds if not provided
 	waitStopSignalTimeout := 60 * time.Second
-	if schema, err := helpers.UnmarshalSchema[WaitStopSignalSchema](activityCtx.Schema); err == nil {
+	if schema, err := helpers.UnmarshalSchema[WaitStopLegacyRecoveryCartSchema](activityCtx.Schema); err == nil {
 		if schema.TimeoutSeconds > 0 {
 			waitStopSignalTimeout = time.Duration(schema.TimeoutSeconds) * time.Second
 		}
 	}
 
 	// Create channel for stop signal
-	stopChannel := workflow.GetSignalChannel(ctx, domain.StopSignal)
+	stopChannel := workflow.GetSignalChannel(ctx, domain.StopLegacyRecoveryCartSignal)
 
 	stopReceived := false
 	conditionStatus := ""
@@ -105,7 +105,7 @@ func waitStopSignalProcessorNode(ctx workflow.Context, activityCtx ActivityConte
 
 		return NodeExecutionResult{
 			Error:        nil,
-			ActivityName: WaitStopSignalName,
+			ActivityName: WaitStopLegacyRecoveryCartName,
 			EventType:    eventType,
 		}
 	}
@@ -114,7 +114,7 @@ func waitStopSignalProcessorNode(ctx workflow.Context, activityCtx ActivityConte
 	logger.Info("WaitStopSignalWorkflowNode: Timeout reached")
 	return NodeExecutionResult{
 		Error:        nil,
-		ActivityName: WaitStopSignalName,
+		ActivityName: WaitStopLegacyRecoveryCartName,
 		EventType:    domain.EventTypeConditionTimeout,
 	}
 }

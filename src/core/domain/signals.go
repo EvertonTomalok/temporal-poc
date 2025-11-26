@@ -1,8 +1,8 @@
 package domain
 
 const (
-	ClientAnsweredSignal = "client-answered"
-	StopSignal           = "stop"
+	ClientAnsweredSignal         = "client-answered"
+	StopLegacyRecoveryCartSignal = "stop-legacy-recovery-cart"
 )
 
 // ClientAnsweredSignalPayload represents the payload sent with the client-answered signal

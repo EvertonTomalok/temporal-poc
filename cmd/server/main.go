@@ -333,7 +333,7 @@ func sendStopSignalHandler(c echo.Context) error {
 	}
 
 	// Send stop signal to workflow (use empty RunID to signal the latest run)
-	err := temporalClient.SignalWorkflow(context.Background(), req.WorkflowID, "", domain.StopSignal, signalPayload)
+	err := temporalClient.SignalWorkflow(context.Background(), req.WorkflowID, "", domain.StopLegacyRecoveryCartSignal, signalPayload)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Unable to signal workflow: %v", err),
