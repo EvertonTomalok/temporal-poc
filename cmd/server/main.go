@@ -77,6 +77,7 @@ func main() {
 	e.GET("/nodes", getNodesHandler)
 	e.POST("/start-workflow", startWorkflowHandler)
 	e.POST("/send-signal", sendSignalHandler)
+	e.POST("/send-stop-signal", sendStopSignalHandler)
 	e.GET("/workflow-status/:workflow_id", getWorkflowStatusHandler)
 
 	// Set up graceful shutdown
@@ -92,6 +93,7 @@ func main() {
 		log.Println("  GET  /nodes - Get all available nodes with schemas")
 		log.Println("  POST /start-workflow - Start a new workflow")
 		log.Println("  POST /send-signal - Send a signal to a workflow")
+		log.Println("  POST /send-stop-signal - Send a stop signal to a workflow")
 		log.Println("  GET  /workflow-status/:workflow_id - Get workflow status and processed steps")
 		if err := e.Start(port); err != nil && err != http.ErrServerClosed {
 			serverErrChan <- err
@@ -216,10 +218,11 @@ func startWorkflowHandler(c echo.Context) error {
 
 // SendSignalRequest represents the request body for sending a signal
 type SendSignalRequest struct {
-	WorkflowID string `json:"workflow_id,omitempty"`
-	RunID      string `json:"run_id,omitempty"`      // Optional: if empty, signals latest run
-	SignalName string `json:"signal_name,omitempty"` // Optional: defaults to "client-answered"
-	Message    string `json:"message,omitempty"`     // Optional: message to send with the signal
+	WorkflowID string                 `json:"workflow_id,omitempty"`
+	RunID      string                 `json:"run_id,omitempty"`      // Optional: if empty, signals latest run
+	SignalName string                 `json:"signal_name,omitempty"` // Optional: defaults to "client-answered"
+	Message    string                 `json:"message,omitempty"`     // Optional: message to send with the signal
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`    // Optional: metadata to send with the signal
 }
 
 // SendSignalResponse represents the response from sending a signal
@@ -270,7 +273,8 @@ func sendSignalHandler(c echo.Context) error {
 
 	// Prepare signal payload
 	signalPayload := domain.ClientAnsweredSignalPayload{
-		Message: req.Message,
+		Message:  req.Message,
+		Metadata: req.Metadata,
 	}
 
 	// Send signal to workflow
@@ -285,6 +289,60 @@ func sendSignalHandler(c echo.Context) error {
 	// Return response
 	response := SendSignalResponse{
 		Message: fmt.Sprintf("Successfully sent '%s' signal to workflow: %s", signalName, workflowID),
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+// SendStopSignalRequest represents the request body for sending a stop signal
+type SendStopSignalRequest struct {
+	WorkflowID      string `json:"workflow_id"`      // Required: workflow ID
+	ConditionStatus string `json:"condition_status"` // Required: must be "satisfied" or "not_satisfied"
+}
+
+// SendStopSignalResponse represents the response from sending a stop signal
+type SendStopSignalResponse struct {
+	Message string `json:"message"`
+}
+
+// sendStopSignalHandler handles POST requests to send a stop signal to a workflow
+func sendStopSignalHandler(c echo.Context) error {
+	var req SendStopSignalRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("Invalid request body: %v", err),
+		})
+	}
+
+	if req.WorkflowID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "workflow_id is required",
+		})
+	}
+
+	// Validate condition_status
+	if req.ConditionStatus != "satisfied" && req.ConditionStatus != "not_satisfied" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "condition_status must be either 'satisfied' or 'not_satisfied'",
+		})
+	}
+
+	// Prepare stop signal payload
+	signalPayload := domain.StopSignalPayload{
+		ConditionStatus: req.ConditionStatus,
+	}
+
+	// Send stop signal to workflow (use empty RunID to signal the latest run)
+	err := temporalClient.SignalWorkflow(context.Background(), req.WorkflowID, "", domain.StopSignal, signalPayload)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("Unable to signal workflow: %v", err),
+		})
+	}
+
+	// Return response
+	response := SendStopSignalResponse{
+		Message: fmt.Sprintf("Successfully sent stop signal to workflow: %s (condition: %s)", req.WorkflowID, req.ConditionStatus),
 	}
 
 	return c.JSON(http.StatusOK, response)

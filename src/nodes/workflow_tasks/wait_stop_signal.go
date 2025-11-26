@@ -46,6 +46,7 @@ func waitStopSignalProcessorNode(ctx workflow.Context, activityCtx ActivityConte
 	stopChannel := workflow.GetSignalChannel(ctx, domain.StopSignal)
 
 	stopReceived := false
+	conditionStatus := ""
 
 	// Create timer outside the loop with summary for UI visibility
 	timerCtx, cancelTimer := workflow.WithCancel(ctx)
@@ -55,11 +56,14 @@ func waitStopSignalProcessorNode(ctx workflow.Context, activityCtx ActivityConte
 	// Create selector outside the loop
 	selector := workflow.NewSelector(ctx)
 
-	// Wait for stop signal
+	// Wait for stop signal with payload
 	selector.AddReceive(stopChannel, func(c workflow.ReceiveChannel, more bool) {
-		c.Receive(ctx, nil) // Receive the signal (no payload needed)
-		logger.Info("WaitStopSignalWorkflowNode: stop signal received")
+		var signalPayload domain.StopSignalPayload
+		c.Receive(ctx, &signalPayload) // Receive the signal with payload
+		logger.Info("WaitStopSignalWorkflowNode: stop signal received",
+			"condition_status", signalPayload.ConditionStatus)
 		stopReceived = true
+		conditionStatus = signalPayload.ConditionStatus
 		cancelTimer()
 	})
 
@@ -75,15 +79,29 @@ func waitStopSignalProcessorNode(ctx workflow.Context, activityCtx ActivityConte
 	// Check if signal was received
 	if stopReceived {
 		cancelTimer()
-		logger.Info("WaitStopSignalWorkflowNode: Stop signal received, processing")
+		logger.Info("WaitStopSignalWorkflowNode: Stop signal received, processing",
+			"condition_status", conditionStatus)
 
-		logger.Info("WaitStopSignalWorkflowNode: Processing completed")
-		// Return result with activity information - executor will call ExecuteActivity
-		// Continue to next node when signal is received
+		// Validate condition_status and determine event type
+		var eventType domain.EventType
+		switch conditionStatus {
+		case "satisfied":
+			eventType = domain.EventTypeConditionSatisfied
+		case "not_satisfied":
+			eventType = domain.EventTypeConditionNotSatisfied
+		default:
+			// Invalid condition_status, default to not_satisfied
+			logger.Warn("WaitStopSignalWorkflowNode: Invalid condition_status, defaulting to not_satisfied",
+				"condition_status", conditionStatus)
+			eventType = domain.EventTypeConditionNotSatisfied
+		}
+
+		logger.Info("WaitStopSignalWorkflowNode: Processing completed", "event_type", eventType)
+
 		return NodeExecutionResult{
 			Error:        nil,
 			ActivityName: WaitStopSignalName,
-			EventType:    domain.EventTypeConditionSatisfied,
+			EventType:    eventType,
 		}
 	}
 

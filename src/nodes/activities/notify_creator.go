@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
+	"temporal-poc/src/helpers"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -12,6 +13,11 @@ import (
 )
 
 const NotifyCreatorActivityName = "notify_creator"
+
+// NotifyCreatorSchema defines the input schema for notify_creator activity
+type NotifyCreatorSchema struct {
+	Message string `json:"message" jsonschema:"description=Message to send in notification,required"`
+}
 
 func init() {
 	// Register with retry policy for automatic retries on failure
@@ -21,8 +27,13 @@ func init() {
 		MaximumInterval:    45 * time.Second,
 		MaximumAttempts:    20,
 	}
-	// No schema defined for notify_creator (no input required)
-	RegisterActivity(NotifyCreatorActivityName, NotifyCreatorActivity, retryPolicy, nil)
+
+	// Define schema for validation
+	schema := &domain.NodeSchema{
+		SchemaStruct: NotifyCreatorSchema{},
+	}
+
+	RegisterActivity(NotifyCreatorActivityName, NotifyCreatorActivity, retryPolicy, schema)
 }
 
 // NotifyCreatorActivity sends a notification to the creator
@@ -46,6 +57,18 @@ func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext, dep
 
 	logger.Info("NotifyCreatorActivity executing", "workflow_id", activityCtx.WorkflowID, "attempt", attempt)
 
+	// Unmarshal schema to get the message
+	schema, err := helpers.UnmarshalSchema[NotifyCreatorSchema](activityCtx.Schema)
+	if err != nil {
+		logger.Error("Failed to unmarshal schema", "error", err)
+		return ActivityResult{}, temporal.NewApplicationError(
+			fmt.Sprintf("invalid schema: %v", err),
+			"InvalidSchema",
+		)
+	}
+
+	logger.Info("NOTIFY CREATOR: Sending notification", "message", schema.Message)
+
 	// Simulate notifying the creator
 	// In a real implementation, this would make an HTTP call, send an email, etc.
 	logger.Info("NOTIFY CREATOR: Sending notification to creator", "attempt", attempt)
@@ -57,6 +80,6 @@ func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext, dep
 	logger.Info("NotifyCreatorActivity completed successfully", "attempt", attempt)
 
 	return ActivityResult{
-		EventType: domain.EventTypeConditionSatisfied,
+		Metadata: map[string]interface{}{"message": schema.Message},
 	}, nil
 }

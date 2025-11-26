@@ -81,6 +81,10 @@ func executeWorkflowNode(
 		return activities.NodeExecutionResult{}, fmt.Errorf("unknown workflow task node name: %s", nodeName)
 	}
 
+	// Get previous step results from memo to pass to workflow node
+	// This allows workflow nodes to access metadata from previous steps
+	previousResults := getPreviousResults(ctx)
+
 	// Execute the workflow node directly (this waits for signals, handles timeouts, etc.)
 	activityCtx := activities.ActivityContext{
 		WorkflowID:      workflowID,
@@ -88,6 +92,7 @@ func executeWorkflowNode(
 		StartTime:       startTime,
 		TimeoutDuration: timeoutDuration,
 		Schema:          schema,
+		PreviousResults: previousResults, // Results/metadata from previous steps
 	}
 
 	result := workflowNode(ctx, activityCtx)
@@ -134,6 +139,10 @@ func executeActivityNode(
 	sas := workflow.GetTypedSearchAttributes(ctx)
 	clientAnswered, _ := sas.GetBool(core.ClientAnsweredField)
 
+	// Get previous step results from memo to pass to activity
+	// This allows activities to access metadata from previous steps
+	previousResults := getPreviousResults(ctx)
+
 	activityCtx := activities.ActivityContext{
 		WorkflowID:      workflowID,
 		NodeName:        nodeName, // Node name for identification in UI/logs
@@ -143,6 +152,7 @@ func executeActivityNode(
 		EventTime:       workflow.Now(ctx),
 		EventType:       domain.EventTypeConditionSatisfied,
 		Schema:          schema,
+		PreviousResults: previousResults, // Results/metadata from previous steps
 	}
 
 	// Set activity timeout - activities should have reasonable timeouts (max 10 minutes)
@@ -196,15 +206,13 @@ func executeActivityNode(
 
 	// Use event type from activity result, default to condition_satisfied if not set
 	eventType := activityResult.EventType
-	if eventType == "" {
-		eventType = domain.EventTypeConditionSatisfied
-	}
 
 	// Return success result with event type from activity
 	result := activities.NodeExecutionResult{
 		Error:        nil,
 		ActivityName: nodeName,
 		EventType:    eventType,
+		Metadata:     activityResult.Metadata,
 	}
 
 	logger.Info("Activity node completed", "node_name", nodeName, "event_type", eventType)
@@ -290,6 +298,28 @@ func (we *workflowExecutor) setFinalWorkflowStatus(status string, err error) {
 	if upsertErr := workflow.UpsertMemo(we.ctx, finalMemo); upsertErr != nil {
 		workflow.GetLogger(we.ctx).Error("Failed to persist final workflow status memo", "error", upsertErr)
 	}
+}
+
+// getPreviousResults retrieves the last activity result from memo to pass to next activities
+// This allows activities to access metadata from previous steps
+func getPreviousResults(ctx workflow.Context) map[string]interface{} {
+	memo := workflow.GetInfo(ctx).Memo
+	if memo == nil || len(memo.Fields) == 0 {
+		return nil
+	}
+
+	// Look for last_activity_result key
+	if lastResultPayload, exists := memo.Fields["last_activity_result"]; exists {
+		var lastResult map[string]interface{}
+		dataConverter := converter.GetDefaultDataConverter()
+		if err := dataConverter.FromPayload(lastResultPayload, &lastResult); err != nil {
+			workflow.GetLogger(ctx).Warn("Failed to decode last_activity_result from memo", "error", err)
+			return nil
+		}
+		return lastResult
+	}
+
+	return nil
 }
 
 // setStepRunningStatus sets the running status memo for a step and returns the started_at time

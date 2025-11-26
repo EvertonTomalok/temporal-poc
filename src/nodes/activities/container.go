@@ -22,6 +22,7 @@ type ActivityContext struct {
 	EventTime       time.Time
 	EventType       domain.EventType
 	Schema          map[string]interface{} // Step schema data (validated against node schema)
+	PreviousResults map[string]interface{} // Results/metadata from previous steps (populated by workflow from memo)
 }
 
 // NodeExecutionResult contains information about the activity to execute
