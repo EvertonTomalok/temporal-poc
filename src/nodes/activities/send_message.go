@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 )
 
@@ -37,7 +38,7 @@ func init() {
 
 // SendMessageActivity sends a message to the client
 // This is a real Temporal activity that will be retried on failure
-func SendMessageActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
+func SendMessageActivity(ctx context.Context, activityCtx ActivityContext, deps core.Deps) (ActivityResult, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("SendMessageActivity executing", "workflow_id", activityCtx.WorkflowID)
 

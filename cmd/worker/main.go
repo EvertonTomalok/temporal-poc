@@ -12,6 +12,7 @@ import (
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/nodes/activities"
 	"temporal-poc/src/register"
+	"temporal-poc/src/services"
 	workflows "temporal-poc/src/workflows"
 
 	"github.com/google/uuid"
@@ -25,35 +26,37 @@ import (
 // DynamicActivity handles all activity executions dynamically by reading from the register
 // It routes to the appropriate activity function based on the activity name
 // Uses converter.EncodedValues to accept dynamic arguments from the workflow
-func DynamicActivity(ctx context.Context, args converter.EncodedValues) (activities.ActivityResult, error) {
-	info := activity.GetInfo(ctx)
-	activityName := info.ActivityType.Name
+func DynamicActivity(deps *core.Deps) func(ctx context.Context, args converter.EncodedValues) (activities.ActivityResult, error) {
+	return func(ctx context.Context, args converter.EncodedValues) (activities.ActivityResult, error) {
+		info := activity.GetInfo(ctx)
+		activityName := info.ActivityType.Name
 
-	logger := activity.GetLogger(ctx)
-	logger.Info("DynamicActivity executing", "ActivityName", activityName)
+		logger := activity.GetLogger(ctx)
+		logger.Info("DynamicActivity executing", "ActivityName", activityName)
 
-	// Decode ActivityContext from the encoded values
-	var activityCtx activities.ActivityContext
-	if err := args.Get(&activityCtx); err != nil {
-		logger.Error("Failed to decode ActivityContext", "error", err)
-		return activities.ActivityResult{}, fmt.Errorf("failed to decode ActivityContext: %w", err)
+		// Decode ActivityContext from the encoded values
+		var activityCtx activities.ActivityContext
+		if err := args.Get(&activityCtx); err != nil {
+			logger.Error("Failed to decode ActivityContext", "error", err)
+			return activities.ActivityResult{}, fmt.Errorf("failed to decode ActivityContext: %w", err)
+		}
+
+		// Get the activity function from the register
+		reg := register.GetInstance()
+		activityFn, exists := reg.GetActivityFunction(activityName)
+		if !exists {
+			return activities.ActivityResult{}, fmt.Errorf("activity not found in register: %s", activityName)
+		}
+
+		// Execute the activity function with deps (dereference pointer to pass value)
+		logger.Info("Executing activity from register", "ActivityName", activityName)
+		result, err := activityFn(ctx, activityCtx, *deps)
+		if err != nil {
+			// Return error to trigger retries
+			return result, err
+		}
+		return result, nil
 	}
-
-	// Get the activity function from the register
-	reg := register.GetInstance()
-	activityFn, exists := reg.GetActivityFunction(activityName)
-	if !exists {
-		return activities.ActivityResult{}, fmt.Errorf("activity not found in register: %s", activityName)
-	}
-
-	// Execute the activity function
-	logger.Info("Executing activity from register", "ActivityName", activityName)
-	result, err := activityFn(ctx, activityCtx)
-	if err != nil {
-		// Return error to trigger retries
-		return result, err
-	}
-	return result, nil
 }
 
 func main() {
@@ -95,13 +98,18 @@ func main() {
 	}
 	log.Println("✓ Search attributes verified/registered successfully")
 
+	// Initialize dependencies - all deps must be initialized here
+	leadService := services.NewLeadService()
+	deps := core.NewDeps(leadService)
+
 	// Create worker
 	w := worker.New(c, domain.PrimaryWorkflowTaskQueue, worker.Options{})
 
 	w.RegisterDynamicWorkflow(workflows.DynamicWorkflow, workflow.DynamicRegisterOptions{})
 
 	// Register dynamic activity as fallback for any unregistered activities
-	w.RegisterDynamicActivity(DynamicActivity, activity.DynamicRegisterOptions{})
+	// Pass deps to DynamicActivity
+	w.RegisterDynamicActivity(DynamicActivity(deps), activity.DynamicRegisterOptions{})
 
 	// Register all nodes from register so they appear in the Temporal UI
 	// Activities are registered with their actual functions from the register

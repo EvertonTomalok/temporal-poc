@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 )
 
@@ -49,7 +50,7 @@ type ActivityResult struct {
 // This is used by actual Temporal activities that run in activity context
 // Activities can return an ActivityResult with an event type to control workflow flow
 // Return an error to trigger retries (retryable errors), or return nil with ActivityResult.Error set for non-retryable errors
-type ActivityFunction func(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error)
+type ActivityFunction func(ctx context.Context, activityCtx ActivityContext, deps core.Deps) (ActivityResult, error)
 
 // ActivityInfo holds information about a registered activity
 type ActivityInfo struct {

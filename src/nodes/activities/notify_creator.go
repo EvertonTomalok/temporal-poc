@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"time"
 
@@ -27,7 +28,7 @@ func init() {
 // NotifyCreatorActivity sends a notification to the creator
 // This is a real Temporal activity that will be retried on failure
 // First attempt fails to demonstrate retry behavior
-func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
+func NotifyCreatorActivity(ctx context.Context, activityCtx ActivityContext, deps core.Deps) (ActivityResult, error) {
 	logger := activity.GetLogger(ctx)
 
 	// Get attempt number from activity info

@@ -2,6 +2,7 @@ package domain
 
 const (
 	ClientAnsweredSignal = "client-answered"
+	StopSignal           = "stop"
 )
 
 // ClientAnsweredSignalPayload represents the payload sent with the client-answered signal

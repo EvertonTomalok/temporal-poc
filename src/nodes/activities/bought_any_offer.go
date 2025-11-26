@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	"temporal-poc/src/helpers"
 	activity_helpers "temporal-poc/src/nodes/activities/helpers"
@@ -42,7 +43,7 @@ func init() {
 // This activity fakes a database call and returns an event type based on the result
 // If condition is satisfied (offer found), returns condition_satisfied (notify creator)
 // If condition is not satisfied (no offer found), returns condition_not_satisfied (move to step 3)
-func BoughtAnyOfferActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
+func BoughtAnyOfferActivity(ctx context.Context, activityCtx ActivityContext, deps core.Deps) (ActivityResult, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("BoughtAnyOfferActivity executing", "workflow_id", activityCtx.WorkflowID)
 

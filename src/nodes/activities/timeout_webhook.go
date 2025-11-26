@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"temporal-poc/src/core"
 	"temporal-poc/src/core/domain"
 	activity_helpers "temporal-poc/src/nodes/activities/helpers"
 	"time"
@@ -35,7 +36,7 @@ func init() {
 
 // TimeoutWebhookActivity sends a webhook notification on timeout
 // This is a real Temporal activity that will be retried on failure
-func TimeoutWebhookActivity(ctx context.Context, activityCtx ActivityContext) (ActivityResult, error) {
+func TimeoutWebhookActivity(ctx context.Context, activityCtx ActivityContext, deps core.Deps) (ActivityResult, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("TimeoutWebhookActivity executing", "workflow_id", activityCtx.WorkflowID)
 
