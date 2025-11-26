@@ -14,6 +14,7 @@ import (
 	"temporal-poc/src/register"
 	"temporal-poc/src/services"
 	workflows "temporal-poc/src/workflows"
+	"time"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
@@ -74,7 +75,7 @@ func main() {
 	if err != nil {
 		log.Fatalln("Unable to create client", err)
 	}
-	defer c.Close()
+	// Note: Client will be closed explicitly during graceful shutdown
 
 	// Register search attributes if they don't exist
 	// This MUST succeed before workflows can run, otherwise workflows will fail with BadSearchAttributes
@@ -102,8 +103,10 @@ func main() {
 	leadService := services.NewLeadService()
 	deps := core.NewDeps(leadService)
 
-	// Create worker
-	w := worker.New(c, domain.PrimaryWorkflowTaskQueue, worker.Options{})
+	// Create worker with stop timeout to ensure graceful shutdown
+	w := worker.New(c, domain.PrimaryWorkflowTaskQueue, worker.Options{
+		WorkerStopTimeout: 5 * time.Second, // Time to wait for tasks to finish before stopping
+	})
 
 	w.RegisterDynamicWorkflow(workflows.DynamicWorkflow, workflow.DynamicRegisterOptions{})
 
@@ -137,12 +140,40 @@ func main() {
 	select {
 	case sig := <-sigChan:
 		log.Printf("Received signal: %v. Initiating graceful shutdown...", sig)
+
+		// Stop the worker - this stops accepting new tasks and stops polling
 		w.Stop()
-		log.Println("Worker stopped gracefully")
-		// Wait for worker to finish
-		if err := <-workerErrChan; err != nil {
-			log.Printf("Worker error during shutdown: %v", err)
+		log.Println("Worker stop requested, waiting for graceful shutdown...")
+
+		// Create a context with timeout for graceful shutdown
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Wait for worker to finish processing and fully detach
+		// Use a select to handle both the worker error channel and timeout
+		select {
+		case err := <-workerErrChan:
+			if err != nil {
+				log.Printf("Worker error during shutdown: %v", err)
+			} else {
+				log.Println("Worker stopped gracefully")
+			}
+		case <-shutdownCtx.Done():
+			log.Println("Worker shutdown timeout reached, forcing stop")
 		}
+
+		// Explicitly close the client connection to detach from Temporal
+		// This closes all connections and stops any remaining polling
+		if c != nil {
+			log.Println("Closing Temporal client connection...")
+			c.Close()
+			log.Println("Worker detached from Temporal")
+		}
+
+		// Small delay to ensure connection is fully closed
+		time.Sleep(100 * time.Millisecond)
+		log.Println("Shutdown complete")
+
 	case err := <-workerErrChan:
 		if err != nil {
 			log.Fatalln("Unable to start worker", err)
