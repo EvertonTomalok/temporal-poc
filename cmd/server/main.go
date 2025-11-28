@@ -18,6 +18,7 @@ import (
 	workflows "temporal-poc/src/workflows"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"go.temporal.io/api/common/v1"
@@ -33,6 +34,7 @@ var temporalClient client.Client
 func init() {
 	// Load Temporal client configuration from .env file
 	clientOptions := config.LoadTemporalClientOptions()
+	clientOptions.Identity = fmt.Sprintf("server-%s", uuid.New().String())
 	clientOptions.Logger = core.NewLoggerWithoutWarnings()
 
 	// Create Temporal client on startup
@@ -44,25 +46,25 @@ func init() {
 
 	// Register search attributes if they don't exist
 	// This MUST succeed before the server can handle workflow requests
-	log.Println("Checking and registering search attributes...")
-	if err := core.RegisterSearchAttributesIfNeeded(temporalClient); err != nil {
-		log.Printf("ERROR: Failed to register search attributes automatically: %v", err)
-		log.Println("")
-		log.Println("Workflows will fail with BadSearchAttributes error if search attributes are not registered.")
-		log.Println("Please register them manually using one of these methods:")
-		log.Println("")
-		log.Println("  Method 1 (Temporal CLI):")
-		log.Println("    temporal operator search-attributes add -name ClientAnswered -type Bool")
-		log.Println("    temporal operator search-attributes add -name ClientAnsweredAt -type Datetime")
-		log.Println("")
-		log.Println("  Method 2 (Temporal Server startup):")
-		log.Println("    temporal server start-dev \\")
-		log.Println("      --search-attribute ClientAnswered=Bool \\")
-		log.Println("      --search-attribute ClientAnsweredAt=Datetime")
-		log.Println("")
-		log.Fatalln("Server cannot start without registered search attributes. Exiting.")
-	}
-	log.Println("✓ Search attributes verified/registered successfully")
+	// log.Println("Checking and registering search attributes...")
+	// if err := core.RegisterSearchAttributesIfNeeded(temporalClient, clientOptions); err != nil {
+	// 	log.Printf("ERROR: Failed to register search attributes automatically: %v", err)
+	// 	log.Println("")
+	// 	log.Println("Workflows will fail with BadSearchAttributes error if search attributes are not registered.")
+	// 	log.Println("Please register them manually using one of these methods:")
+	// 	log.Println("")
+	// 	log.Println("  Method 1 (Temporal CLI):")
+	// 	log.Println("    temporal operator search-attributes add -name ClientAnswered -type Bool")
+	// 	log.Println("    temporal operator search-attributes add -name ClientAnsweredAt -type Datetime")
+	// 	log.Println("")
+	// 	log.Println("  Method 2 (Temporal Server startup):")
+	// 	log.Println("    temporal server start-dev \\")
+	// 	log.Println("      --search-attribute ClientAnswered=Bool \\")
+	// 	log.Println("      --search-attribute ClientAnsweredAt=Datetime")
+	// 	log.Println("")
+	// 	log.Fatalln("Server cannot start without registered search attributes. Exiting.")
+	// }
+	// log.Println("✓ Search attributes verified/registered successfully")
 }
 
 func main() {

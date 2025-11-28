@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -12,7 +14,9 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 // Search attribute keys for client-answered tracking
@@ -35,21 +39,38 @@ var SearchAttributeKeys = []SearchAttributeKey{
 
 // RegisterSearchAttributesIfNeeded registers the required search attributes with the Temporal server
 // if they don't already exist. This should be called during worker initialization.
-func RegisterSearchAttributesIfNeeded(c client.Client) error {
-	// Get the host port from the client options or use default
-	hostPort := client.DefaultHostPort
+// It accepts clientOptions to use the same connection settings (host, TLS, credentials) as the client.
+func RegisterSearchAttributesIfNeeded(c client.Client, clientOptions client.Options) error {
+	// Get the host port from the client options
+	hostPort := clientOptions.HostPort
+	if hostPort == "" {
+		hostPort = client.DefaultHostPort
+	}
 
-	// Try to extract host port from client using type assertion
-	// The client interface doesn't expose this directly, so we'll use the default
-	// or try to get it from the client's internal state
+	// Determine if we need TLS (for Temporal Cloud)
+	useTLS := clientOptions.Credentials != nil || clientOptions.ConnectionOptions.TLS != nil
 
 	// Create a new gRPC connection for the operator service
-	// Use insecure credentials for local development (use TLS in production)
+	// Use the same connection settings as the client (TLS and credentials for cloud)
 	log.Printf("Connecting to Temporal server at %s to register search attributes...", hostPort)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, hostPort, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var dialOptions []grpc.DialOption
+
+	if useTLS {
+		// Use TLS credentials for Temporal Cloud
+		tlsConfig := clientOptions.ConnectionOptions.TLS
+		if tlsConfig == nil {
+			tlsConfig = &tls.Config{}
+		}
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	} else {
+		// Use insecure credentials for local development
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	conn, err := grpc.DialContext(ctx, hostPort, dialOptions...)
 	if err != nil {
 		return fmt.Errorf("unable to create gRPC connection to %s: %w. Please register search attributes manually", hostPort, err)
 	}
@@ -58,10 +79,29 @@ func RegisterSearchAttributesIfNeeded(c client.Client) error {
 
 	operatorClient := operatorservice.NewOperatorServiceClient(conn)
 
+	// Extract API key from credentials and add to metadata if available
+	// For Temporal Cloud, the API key needs to be sent in the authorization header
+	var apiKey string
+	if clientOptions.Credentials != nil {
+		// Try to extract API key from credentials using reflection or read from env
+		// The Temporal SDK's APIKeyStaticCredentials doesn't expose the key directly,
+		// so we read it from the environment variable as a fallback
+		apiKey = os.Getenv("TEMPORAL_API_KEY")
+	}
+
+	// Create a context with metadata if we have an API key
+	requestCtx := ctx
+	if apiKey != "" {
+		md := metadata.New(map[string]string{
+			"authorization": "Bearer " + apiKey,
+		})
+		requestCtx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	// First, list existing search attributes to check what's already registered
 	log.Println("Listing existing search attributes...")
 	listReq := &operatorservice.ListSearchAttributesRequest{}
-	listResp, err := operatorClient.ListSearchAttributes(ctx, listReq)
+	listResp, err := operatorClient.ListSearchAttributes(requestCtx, listReq)
 	if err != nil {
 		return fmt.Errorf("failed to list search attributes (check connection and permissions): %w", err)
 	}
@@ -91,7 +131,7 @@ func RegisterSearchAttributesIfNeeded(c client.Client) error {
 		SearchAttributes: attributesToAdd,
 	}
 
-	_, err = operatorClient.AddSearchAttributes(ctx, addReq)
+	_, err = operatorClient.AddSearchAttributes(requestCtx, addReq)
 	if err != nil {
 		// Check if it's an "already exists" error (which is fine)
 		errMsg := err.Error()
@@ -114,7 +154,7 @@ func RegisterSearchAttributesIfNeeded(c client.Client) error {
 	time.Sleep(500 * time.Millisecond)
 
 	// Verify the registration by listing again
-	listResp2, err := operatorClient.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
+	listResp2, err := operatorClient.ListSearchAttributes(requestCtx, &operatorservice.ListSearchAttributesRequest{})
 	if err == nil {
 		allRegistered := true
 		for name := range attributesToAdd {
