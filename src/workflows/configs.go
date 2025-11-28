@@ -14,10 +14,10 @@ func BuildDefaultWorkflowDefinition() WorkflowConfig {
 		StartStep: "step_1",
 		Steps: map[string]StepConfig{
 			"step_1": {
-				Node: "bought_any_offer", // Activity task with conditional branching
+				Node: "is_converted", // Activity task with conditional branching
 				Condition: &domain.Condition{
-					Satisfied:    "step_2", // If offer found (condition_satisfied)
-					NotSatisfied: "step_3", // If no offer found (condition_not_satisfied)
+					Satisfied:    "step_2", // If conversion found (condition_satisfied)
+					NotSatisfied: "step_3", // If no conversion found (condition_not_satisfied)
 				},
 				Schema: map[string]interface{}{ // Schema input validated against node schema
 					"last_minutes": int64(60),
